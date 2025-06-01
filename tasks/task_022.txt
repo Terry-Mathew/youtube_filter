@@ -1,0 +1,674 @@
+# TASK_022: Implement comprehensive testing strategy
+
+## Overview
+Establish robust testing infrastructure covering unit tests, integration tests, and end-to-end testing to ensure code quality and reliability.
+
+## Acceptance Criteria
+- [ ] Set up Jest and React Testing Library for unit tests
+- [ ] Implement API integration tests
+- [ ] Create end-to-end test suite with Playwright/Cypress
+- [ ] Add visual regression testing
+- [ ] Implement test coverage reporting
+- [ ] Set up automated testing in CI/CD
+- [ ] Create testing documentation and best practices
+
+## Technical Requirements
+
+### Jest Configuration (`jest.config.js`):
+```javascript
+const nextJest = require('next/jest');
+
+const createJestConfig = nextJest({
+  // Provide the path to your Next.js app to load next.config.js and .env files
+  dir: './',
+});
+
+// Add any custom config to be passed to Jest
+const customJestConfig = {
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  moduleNameMapping: {
+    // Handle module aliases (this will be automatically configured for you based on your tsconfig.json paths)
+    '^@/components/(.*)$': '<rootDir>/components/$1',
+    '^@/pages/(.*)$': '<rootDir>/pages/$1',
+    '^@/lib/(.*)$': '<rootDir>/lib/$1',
+    '^@/hooks/(.*)$': '<rootDir>/src/hooks/$1',
+    '^@/store/(.*)$': '<rootDir>/src/store/$1',
+    '^@/types$': '<rootDir>/src/types.ts',
+  },
+  testEnvironment: 'jest-environment-jsdom',
+  collectCoverageFrom: [
+    'src/**/*.{js,jsx,ts,tsx}',
+    'lib/**/*.{js,jsx,ts,tsx}',
+    'pages/**/*.{js,jsx,ts,tsx}',
+    '!**/*.d.ts',
+    '!**/node_modules/**',
+    '!**/.next/**',
+    '!**/coverage/**',
+    '!**/*.config.js',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
+  testPathIgnorePatterns: [
+    '<rootDir>/.next/',
+    '<rootDir>/node_modules/',
+    '<rootDir>/e2e/',
+  ],
+  transform: {
+    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
+  },
+  transformIgnorePatterns: [
+    '/node_modules/',
+    '^.+\\.module\\.(css|sass|scss)$',
+  ],
+};
+
+// createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
+module.exports = createJestConfig(customJestConfig);
+```
+
+### Jest Setup (`jest.setup.js`):
+```javascript
+import '@testing-library/jest-dom';
+import 'whatwg-fetch';
+
+// Mock Next.js router
+jest.mock('next/router', () => ({
+  useRouter() {
+    return {
+      route: '/',
+      pathname: '/',
+      query: {},
+      asPath: '/',
+      push: jest.fn(),
+      pop: jest.fn(),
+      reload: jest.fn(),
+      back: jest.fn(),
+      prefetch: jest.fn().mockResolvedValue(undefined),
+      beforePopState: jest.fn(),
+      events: {
+        on: jest.fn(),
+        off: jest.fn(),
+        emit: jest.fn(),
+      },
+      isFallback: false,
+    };
+  },
+}));
+
+// Mock environment variables
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-key';
+process.env.OPENAI_API_KEY = 'test-openai-key';
+process.env.YOUTUBE_API_KEY = 'test-youtube-key';
+
+// Mock window.matchMedia
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: jest.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: jest.fn(), // deprecated
+    removeListener: jest.fn(), // deprecated
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    dispatchEvent: jest.fn(),
+  })),
+});
+
+// Mock IntersectionObserver
+global.IntersectionObserver = class IntersectionObserver {
+  constructor() {}
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+};
+
+// Mock ResizeObserver
+global.ResizeObserver = class ResizeObserver {
+  constructor() {}
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+};
+
+// Mock crypto.randomUUID
+Object.defineProperty(global, 'crypto', {
+  value: {
+    randomUUID: jest.fn(() => 'test-uuid-1234'),
+  },
+});
+
+// Suppress console errors during tests
+const originalError = console.error;
+beforeAll(() => {
+  console.error = (...args) => {
+    if (
+      typeof args[0] === 'string' &&
+      args[0].includes('Warning: ReactDOM.render is no longer supported')
+    ) {
+      return;
+    }
+    originalError.call(console, ...args);
+  };
+});
+
+afterAll(() => {
+  console.error = originalError;
+});
+```
+
+### Component Test Examples (`src/components/__tests__/VideoCard.test.tsx`):
+```typescript
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { VideoCard } from '../VideoCard/VideoCard';
+import { Video } from '../../types';
+
+// Mock the store
+jest.mock('../../store/useStore', () => ({
+  useStore: () => ({
+    addToCategory: jest.fn(),
+    categories: [
+      { id: '1', name: 'React Tutorials', description: 'Learn React' },
+      { id: '2', name: 'JavaScript', description: 'JS fundamentals' },
+    ],
+  }),
+}));
+
+const mockVideo: Video = {
+  youtube_id: 'test123',
+  title: 'Test Video Title',
+  description: 'This is a test video description',
+  channel_title: 'Test Channel',
+  published_at: '2024-01-01T00:00:00Z',
+  duration: 'PT10M30S',
+  view_count: 1000,
+  like_count: 50,
+  dislike_count: 2,
+  thumbnail_url: 'https://img.youtube.com/vi/test123/maxresdefault.jpg',
+  tags: ['react', 'tutorial'],
+  ai_analysis: {
+    overall_quality_score: 0.85,
+    relevance_scores: {
+      '1': 0.9,
+      '2': 0.7,
+    },
+    key_topics: ['React hooks', 'State management'],
+    difficulty_level: 'intermediate',
+    summary: 'Great tutorial on React hooks',
+    pros: ['Clear explanations', 'Good examples'],
+    cons: ['Could be shorter'],
+  },
+};
+
+describe('VideoCard', () => {
+  it('renders video information correctly', () => {
+    render(<VideoCard video={mockVideo} />);
+
+    expect(screen.getByText('Test Video Title')).toBeInTheDocument();
+    expect(screen.getByText('Test Channel')).toBeInTheDocument();
+    expect(screen.getByText('1,000 views')).toBeInTheDocument();
+    expect(screen.getByAltText('Test Video Title')).toBeInTheDocument();
+  });
+
+  it('shows AI analysis when showAnalysis prop is true', () => {
+    render(<VideoCard video={mockVideo} showAnalysis />);
+
+    expect(screen.getByText('85%')).toBeInTheDocument(); // Quality score
+    expect(screen.getByText('Great tutorial on React hooks')).toBeInTheDocument();
+    expect(screen.getByText('Clear explanations')).toBeInTheDocument();
+  });
+
+  it('opens YouTube video when clicked', () => {
+    // Mock window.open
+    const mockOpen = jest.fn();
+    global.open = mockOpen;
+
+    render(<VideoCard video={mockVideo} />);
+
+    const videoCard = screen.getByRole('article');
+    fireEvent.click(videoCard);
+
+    expect(mockOpen).toHaveBeenCalledWith(
+      'https://www.youtube.com/watch?v=test123',
+      '_blank'
+    );
+  });
+
+  it('formats duration correctly', () => {
+    render(<VideoCard video={mockVideo} />);
+    expect(screen.getByText('10:30')).toBeInTheDocument();
+  });
+
+  it('handles video without AI analysis', () => {
+    const videoWithoutAnalysis = { ...mockVideo, ai_analysis: undefined };
+    render(<VideoCard video={videoWithoutAnalysis} showAnalysis />);
+
+    expect(screen.queryByText('85%')).not.toBeInTheDocument();
+    expect(screen.getByText('Test Video Title')).toBeInTheDocument();
+  });
+});
+```
+
+### API Integration Tests (`__tests__/api/categories.test.ts`):
+```typescript
+import { createMocks } from 'node-mocks-http';
+import handler from '../../pages/api/categories';
+import { supabase } from '../../lib/supabase';
+
+// Mock Supabase
+jest.mock('../../lib/supabase', () => ({
+  supabase: {
+    from: jest.fn(() => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          single: jest.fn(),
+        })),
+        order: jest.fn(),
+      })),
+      insert: jest.fn(() => ({
+        select: jest.fn(),
+      })),
+      update: jest.fn(() => ({
+        eq: jest.fn(),
+      })),
+      delete: jest.fn(() => ({
+        eq: jest.fn(),
+      })),
+    })),
+    auth: {
+      getUser: jest.fn(),
+    },
+  },
+}));
+
+describe('/api/categories', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('GET - returns categories successfully', async () => {
+    const mockCategories = [
+      { id: '1', name: 'React', description: 'React tutorials' },
+      { id: '2', name: 'JavaScript', description: 'JS fundamentals' },
+    ];
+
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        order: jest.fn().mockResolvedValue({
+          data: mockCategories,
+          error: null,
+        }),
+      }),
+    });
+
+    const { req, res } = createMocks({
+      method: 'GET',
+    });
+
+    await handler(req, res);
+
+    expect(res._getStatusCode()).toBe(200);
+    const data = JSON.parse(res._getData());
+    expect(data.success).toBe(true);
+    expect(data.data).toEqual(mockCategories);
+  });
+
+  it('POST - creates category successfully', async () => {
+    const newCategory = {
+      name: 'Vue.js',
+      description: 'Vue.js tutorials',
+      criteria: 'Vue-related content',
+    };
+
+    const createdCategory = {
+      id: '3',
+      ...newCategory,
+      created_at: new Date().toISOString(),
+    };
+
+    (supabase.from as jest.Mock).mockReturnValue({
+      insert: jest.fn().mockReturnValue({
+        select: jest.fn().mockResolvedValue({
+          data: [createdCategory],
+          error: null,
+        }),
+      }),
+    });
+
+    const { req, res } = createMocks({
+      method: 'POST',
+      body: newCategory,
+    });
+
+    await handler(req, res);
+
+    expect(res._getStatusCode()).toBe(201);
+    const data = JSON.parse(res._getData());
+    expect(data.success).toBe(true);
+    expect(data.data.name).toBe(newCategory.name);
+  });
+
+  it('POST - validates required fields', async () => {
+    const { req, res } = createMocks({
+      method: 'POST',
+      body: {
+        description: 'Missing name field',
+      },
+    });
+
+    await handler(req, res);
+
+    expect(res._getStatusCode()).toBe(400);
+    const data = JSON.parse(res._getData());
+    expect(data.success).toBe(false);
+    expect(data.error).toContain('Name is required');
+  });
+
+  it('handles database errors gracefully', async () => {
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        order: jest.fn().mockResolvedValue({
+          data: null,
+          error: { message: 'Database connection failed' },
+        }),
+      }),
+    });
+
+    const { req, res } = createMocks({
+      method: 'GET',
+    });
+
+    await handler(req, res);
+
+    expect(res._getStatusCode()).toBe(500);
+    const data = JSON.parse(res._getData());
+    expect(data.success).toBe(false);
+    expect(data.error).toBe('Database connection failed');
+  });
+});
+```
+
+### Service Tests (`lib/__tests__/youtube-service.test.ts`):
+```typescript
+import { YouTubeService } from '../youtube-service';
+
+// Mock fetch
+global.fetch = jest.fn();
+
+describe('YouTubeService', () => {
+  let youtubeService: YouTubeService;
+
+  beforeEach(() => {
+    youtubeService = YouTubeService.getInstance();
+    (fetch as jest.Mock).mockClear();
+  });
+
+  describe('searchVideos', () => {
+    it('searches videos successfully', async () => {
+      const mockResponse = {
+        items: [
+          {
+            id: { videoId: 'test123' },
+            snippet: {
+              title: 'Test Video',
+              description: 'Test description',
+              channelTitle: 'Test Channel',
+              publishedAt: '2024-01-01T00:00:00Z',
+              thumbnails: {
+                maxres: { url: 'https://img.youtube.com/vi/test123/maxresdefault.jpg' },
+              },
+            },
+          },
+        ],
+      };
+
+      (fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await youtubeService.searchVideos('react tutorial');
+
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining('youtube.googleapis.com/youtube/v3/search')
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('Test Video');
+    });
+
+    it('handles API errors gracefully', async () => {
+      (fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+      });
+
+      await expect(youtubeService.searchVideos('test')).rejects.toThrow(
+        'YouTube API request failed: 403 Forbidden'
+      );
+    });
+
+    it('handles network errors', async () => {
+      (fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+
+      await expect(youtubeService.searchVideos('test')).rejects.toThrow('Network error');
+    });
+  });
+
+  describe('getVideoDetails', () => {
+    it('fetches video details successfully', async () => {
+      const mockResponse = {
+        items: [
+          {
+            id: 'test123',
+            snippet: {
+              title: 'Test Video',
+              description: 'Test description',
+              channelTitle: 'Test Channel',
+              publishedAt: '2024-01-01T00:00:00Z',
+              tags: ['react', 'tutorial'],
+            },
+            contentDetails: {
+              duration: 'PT10M30S',
+            },
+            statistics: {
+              viewCount: '1000',
+              likeCount: '50',
+              dislikeCount: '2',
+            },
+          },
+        ],
+      };
+
+      (fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const result = await youtubeService.getVideoDetails('test123');
+
+      expect(result.duration).toBe('PT10M30S');
+      expect(result.view_count).toBe(1000);
+      expect(result.tags).toEqual(['react', 'tutorial']);
+    });
+  });
+});
+```
+
+### E2E Test Configuration (`playwright.config.ts`):
+```typescript
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: [
+    ['html'],
+    ['json', { outputFile: 'test-results.json' }],
+    ['junit', { outputFile: 'test-results.xml' }],
+  ],
+  use: {
+    baseURL: 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+  },
+
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'Mobile Chrome',
+      use: { ...devices['Pixel 5'] },
+    },
+    {
+      name: 'Mobile Safari',
+      use: { ...devices['iPhone 12'] },
+    },
+  ],
+
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+  },
+});
+```
+
+### E2E Test Example (`e2e/video-search.spec.ts`):
+```typescript
+import { test, expect } from '@playwright/test';
+
+test.describe('Video Search', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+  });
+
+  test('should search for videos', async ({ page }) => {
+    // Enter search query
+    await page.fill('[data-testid=search-input]', 'react tutorial');
+    await page.click('[data-testid=search-button]');
+
+    // Wait for results
+    await page.waitForSelector('[data-testid=video-card]');
+
+    // Verify results are displayed
+    const videoCards = page.locator('[data-testid=video-card]');
+    await expect(videoCards).toHaveCountGreaterThan(0);
+
+    // Check first video card has required elements
+    const firstCard = videoCards.first();
+    await expect(firstCard.locator('[data-testid=video-title]')).toBeVisible();
+    await expect(firstCard.locator('[data-testid=video-channel]')).toBeVisible();
+    await expect(firstCard.locator('[data-testid=video-thumbnail]')).toBeVisible();
+  });
+
+  test('should open video in new tab when clicked', async ({ page, context }) => {
+    await page.fill('[data-testid=search-input]', 'react');
+    await page.click('[data-testid=search-button]');
+    await page.waitForSelector('[data-testid=video-card]');
+
+    // Listen for new page
+    const pagePromise = context.waitForEvent('page');
+    await page.locator('[data-testid=video-card]').first().click();
+
+    const newPage = await pagePromise;
+    await newPage.waitForLoadState();
+
+    // Verify YouTube URL
+    expect(newPage.url()).toMatch(/youtube\.com\/watch\?v=/);
+  });
+
+  test('should filter videos by category', async ({ page }) => {
+    // Create a category first
+    await page.click('[data-testid=categories-menu]');
+    await page.click('[data-testid=add-category-button]');
+    await page.fill('[data-testid=category-name-input]', 'Test Category');
+    await page.fill('[data-testid=category-description-input]', 'Test description');
+    await page.click('[data-testid=save-category-button]');
+
+    // Search for videos
+    await page.fill('[data-testid=search-input]', 'react');
+    await page.click('[data-testid=search-button]');
+    await page.waitForSelector('[data-testid=video-card]');
+
+    // Apply category filter
+    await page.click('[data-testid=category-filter]');
+    await page.click('[data-testid=category-option]:has-text("Test Category")');
+
+    // Verify filtered results
+    await page.waitForSelector('[data-testid=filtered-results]');
+    await expect(page.locator('[data-testid=active-filter]')).toContainText('Test Category');
+  });
+
+  test('should show loading state during search', async ({ page }) => {
+    await page.fill('[data-testid=search-input]', 'react');
+    await page.click('[data-testid=search-button]');
+
+    // Verify loading indicator appears
+    await expect(page.locator('[data-testid=loading-spinner]')).toBeVisible();
+
+    // Wait for results to load
+    await page.waitForSelector('[data-testid=video-card]');
+    await expect(page.locator('[data-testid=loading-spinner]')).not.toBeVisible();
+  });
+});
+```
+
+## Files to Create
+- `jest.config.js` - Jest configuration
+- `jest.setup.js` - Test setup and mocks
+- `__tests__/api/` - API integration tests
+- `src/components/__tests__/` - Component unit tests
+- `lib/__tests__/` - Service unit tests
+- `e2e/` - End-to-end tests
+- `playwright.config.ts` - Playwright configuration
+
+## Dependencies
+- No specific task dependencies (can run independently)
+
+## Testing Scripts (`package.json`):
+```json
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --watchAll=false",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:all": "npm run test:ci && npm run test:e2e"
+  }
+}
+```
+
+## Definition of Done
+- Unit tests covering >80% of codebase
+- Integration tests for all API endpoints
+- E2E tests for critical user journeys
+- Visual regression tests implemented
+- Test coverage reporting configured
+- CI/CD integration working
+- Testing documentation complete 

@@ -1,0 +1,315 @@
+# TASK_002_003: Add category selection and filtering logic
+
+## Overview
+Implement category selection, multi-category filtering, and video filtering logic in the Zustand store to enable users to filter and organize videos by categories.
+
+## Acceptance Criteria
+- [ ] Active category selection with single and multi-select modes
+- [ ] Category-based video filtering functionality
+- [ ] Category combination logic (AND/OR operations)
+- [ ] Category filter state management
+- [ ] Video relevance scoring integration
+- [ ] Category hierarchy support (for future use)
+
+## Technical Requirements
+
+### Category Selection Actions:
+```typescript
+// Single category selection
+setActiveCategory: (categoryId: CategoryId | null) => void => {
+  set((state) => ({
+    activeCategoryId: categoryId,
+    selectedCategoryIds: categoryId ? [categoryId] : [],
+  }));
+};
+
+// Multi-category selection
+toggleCategorySelection: (categoryId: CategoryId) => void => {
+  set((state) => ({
+    selectedCategoryIds: state.selectedCategoryIds.includes(categoryId)
+      ? state.selectedCategoryIds.filter((id) => id !== categoryId)
+      : [...state.selectedCategoryIds, categoryId],
+    activeCategoryId: null, // Clear single selection when multi-selecting
+  }));
+};
+
+// Select multiple categories
+selectCategories: (categoryIds: CategoryId[]) => void => {
+  set((state) => ({
+    selectedCategoryIds: [...new Set(categoryIds)], // Remove duplicates
+    activeCategoryId: categoryIds.length === 1 ? categoryIds[0] : null,
+  }));
+};
+
+// Clear all selections
+clearCategorySelection: () => void => {
+  set(() => ({
+    selectedCategoryIds: [],
+    activeCategoryId: null,
+  }));
+};
+```
+
+### Video Filtering Logic:
+```typescript
+interface VideoFilterOptions {
+  categories?: CategoryId[];
+  relevanceThreshold?: number;
+  filterMode?: 'any' | 'all'; // OR vs AND logic
+  includeUnassigned?: boolean;
+}
+
+// Get filtered videos based on selected categories
+getFilteredVideos: (options?: VideoFilterOptions) => Video[] => {
+  const state = get();
+  const {
+    categories = state.selectedCategoryIds,
+    relevanceThreshold = DEFAULT_RELEVANCE_THRESHOLD,
+    filterMode = 'any',
+    includeUnassigned = false,
+  } = options || {};
+
+  if (categories.length === 0 && !includeUnassigned) {
+    return state.videos; // Return all videos if no categories selected
+  }
+
+  return state.videos.filter((video) => {
+    // Include unassigned videos if requested
+    if (!video.categories || video.categories.length === 0) {
+      return includeUnassigned;
+    }
+
+    // Check category membership
+    const videoCategoryIds = video.categories.map((cat) => cat as CategoryId);
+    const hasCategories = filterMode === 'all'
+      ? categories.every((catId) => videoCategoryIds.includes(catId))
+      : categories.some((catId) => videoCategoryIds.includes(catId));
+
+    if (!hasCategories) return false;
+
+    // Check relevance threshold if AI analysis is available
+    if (video.ai_analysis?.relevanceScores) {
+      const relevantCategories = categories.filter((catId) => 
+        (video.ai_analysis!.relevanceScores[catId] || 0) >= relevanceThreshold
+      );
+      
+      return filterMode === 'all' 
+        ? relevantCategories.length === categories.length
+        : relevantCategories.length > 0;
+    }
+
+    return true; // Include if no AI analysis available
+  });
+};
+```
+
+### Category Statistics and Insights:
+```typescript
+// Get category statistics
+getCategoryStats: () => Record<CategoryId, CategoryStats> => {
+  const state = get();
+  const stats: Record<CategoryId, CategoryStats> = {};
+
+  state.categories.forEach((category) => {
+    const categoryVideos = state.videos.filter((video) =>
+      video.categories?.includes(category.id)
+    );
+
+    const totalRelevanceScore = categoryVideos.reduce((sum, video) => {
+      return sum + (video.ai_analysis?.relevanceScores[category.id] || 0);
+    }, 0);
+
+    stats[category.id] = {
+      videoCount: categoryVideos.length,
+      averageRelevanceScore: categoryVideos.length > 0 
+        ? totalRelevanceScore / categoryVideos.length 
+        : 0,
+      lastVideoAdded: categoryVideos.length > 0
+        ? Math.max(...categoryVideos.map((v) => new Date(v.published_at).getTime()))
+        : null,
+      totalViewCount: categoryVideos.reduce((sum, video) => sum + video.view_count, 0),
+    };
+  });
+
+  return stats;
+};
+
+interface CategoryStats {
+  videoCount: number;
+  averageRelevanceScore: number;
+  lastVideoAdded: number | null;
+  totalViewCount: number;
+}
+```
+
+### Advanced Filtering Features:
+```typescript
+// Update category filters
+updateCategoryFilters: (filters: Partial<typeof get().categoryFilters>) => void => {
+  set((state) => ({
+    categoryFilters: {
+      ...state.categoryFilters,
+      ...filters,
+    },
+  }));
+};
+
+// Get filtered and sorted categories
+getFilteredCategories: () => Category[] => {
+  const state = get();
+  const { searchQuery, sortBy, sortOrder, showInactive } = state.categoryFilters;
+  
+  let filteredCategories = state.categories;
+
+  // Filter by search query
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase().trim();
+    filteredCategories = filteredCategories.filter((category) =>
+      category.name.toLowerCase().includes(query) ||
+      category.description.toLowerCase().includes(query) ||
+      category.tags?.some((tag) => tag.toLowerCase().includes(query))
+    );
+  }
+
+  // Filter by active status
+  if (!showInactive) {
+    filteredCategories = filteredCategories.filter((category) => category.isActive);
+  }
+
+  // Sort categories
+  filteredCategories.sort((a, b) => {
+    let comparison = 0;
+    
+    switch (sortBy) {
+      case 'name':
+        comparison = a.name.localeCompare(b.name);
+        break;
+      case 'createdAt':
+        comparison = a.createdAt.getTime() - b.createdAt.getTime();
+        break;
+      case 'videoCount':
+        comparison = (a.videoCount || 0) - (b.videoCount || 0);
+        break;
+      default:
+        comparison = a.sortOrder - b.sortOrder;
+    }
+
+    return sortOrder === 'desc' ? -comparison : comparison;
+  });
+
+  return filteredCategories;
+};
+
+// Smart category suggestions based on video content
+getSuggestedCategories: (video: Video) => Array<{ category: Category; score: number }> => {
+  const state = get();
+  
+  if (!video.ai_analysis?.relevanceScores) {
+    return [];
+  }
+
+  return state.categories
+    .map((category) => ({
+      category,
+      score: video.ai_analysis!.relevanceScores[category.id] || 0,
+    }))
+    .filter((item) => item.score > 0.5) // Minimum relevance threshold
+    .sort((a, b) => b.score - a.score) // Sort by relevance (highest first)
+    .slice(0, 5); // Return top 5 suggestions
+};
+```
+
+### Category Combination Logic:
+```typescript
+// Advanced category combination rules
+interface CategoryCombination {
+  id: string;
+  name: string;
+  categoryIds: CategoryId[];
+  operator: 'AND' | 'OR' | 'NOT';
+  description: string;
+}
+
+// State for saved combinations
+categoryCombinations: CategoryCombination[];
+
+// Actions for managing combinations
+saveCategoryCombination: (combination: Omit<CategoryCombination, 'id'>) => string => {
+  const id = generateCombinationId();
+  const newCombination: CategoryCombination = { ...combination, id };
+  
+  set((state) => ({
+    categoryCombinations: [...state.categoryCombinations, newCombination],
+  }));
+  
+  return id;
+};
+
+applyCategoryCombination: (combinationId: string) => void => {
+  const state = get();
+  const combination = state.categoryCombinations.find((c) => c.id === combinationId);
+  
+  if (combination) {
+    set(() => ({
+      selectedCategoryIds: combination.categoryIds,
+      activeCategoryId: null,
+    }));
+  }
+};
+```
+
+### Getters for UI Components:
+```typescript
+// Computed selectors for React components
+getters: {
+  // Get currently selected categories
+  selectedCategories: () => {
+    const state = get();
+    return state.categories.filter((cat) => 
+      state.selectedCategoryIds.includes(cat.id)
+    );
+  },
+
+  // Get active category
+  activeCategory: () => {
+    const state = get();
+    return state.activeCategoryId 
+      ? state.categories.find((cat) => cat.id === state.activeCategoryId) || null
+      : null;
+  },
+
+  // Check if any categories are selected
+  hasSelectedCategories: () => {
+    return get().selectedCategoryIds.length > 0;
+  },
+
+  // Get video count for filtered results
+  filteredVideoCount: () => {
+    return get().getFilteredVideos().length;
+  },
+};
+```
+
+## Files to Modify
+- `src/store/index.ts` - Add category selection and filtering logic
+
+## Dependencies
+- TASK_002_002 (Category CRUD operations must exist)
+- TASK_002_001 (Category state structure must exist)
+- TASK_001 (TypeScript interfaces must exist)
+
+## Implementation Notes
+- Optimize filtering performance for large video collections
+- Support both single and multi-category selection modes
+- Implement efficient video filtering algorithms
+- Consider memoization for expensive computations
+- Prepare for future AI-powered category suggestions
+- Support category combination logic for power users
+
+## Definition of Done
+- Category selection working with single and multi-select modes
+- Video filtering by categories functional
+- Category statistics and insights available
+- Advanced filtering options implemented
+- Performance optimized for large datasets
+- TypeScript types properly maintained 

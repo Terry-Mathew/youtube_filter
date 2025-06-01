@@ -1,0 +1,490 @@
+# TASK_007: Implement YouTube Data API v3 integration
+
+## Overview
+Create a backend service for fetching YouTube videos using user-provided API keys, integrating with the YouTube Data API v3 to search and retrieve video metadata.
+
+## Acceptance Criteria
+- [ ] Implement YouTube Data API v3 client
+- [ ] Create video search functionality by keywords
+- [ ] Add video metadata extraction
+- [ ] Implement API key validation
+- [ ] Add quota usage tracking
+- [ ] Create rate limiting and caching
+- [ ] Handle API errors and edge cases
+- [ ] Add video filtering and sorting
+
+## Technical Requirements
+
+### YouTube API Service (`lib/youtube-api.ts`):
+```typescript
+import { Video } from '../src/types';
+
+interface YouTubeConfig {
+  apiKey: string;
+  maxResults?: number;
+  region?: string;
+  language?: string;
+}
+
+interface YouTubeSearchOptions {
+  query: string;
+  maxResults?: number;
+  order?: 'relevance' | 'date' | 'rating' | 'viewCount' | 'title';
+  publishedAfter?: string;
+  publishedBefore?: string;
+  videoDuration?: 'short' | 'medium' | 'long';
+  videoDefinition?: 'standard' | 'high';
+  type?: 'video' | 'channel' | 'playlist';
+}
+
+interface YouTubeSearchResult {
+  videos: Video[];
+  nextPageToken?: string;
+  totalResults: number;
+  quotaUsed: number;
+}
+
+export class YouTubeApiService {
+  private apiKey: string;
+  private baseUrl = 'https://www.googleapis.com/youtube/v3';
+  private quotaUsed = 0;
+
+  constructor(config: YouTubeConfig) {
+    this.apiKey = config.apiKey;
+  }
+
+  async validateApiKey(): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/search?part=snippet&q=test&maxResults=1&key=${this.apiKey}`
+      );
+      
+      if (response.status === 403) {
+        const error = await response.json();
+        // Check for quota exceeded vs invalid key
+        if (error.error?.errors?.[0]?.reason === 'quotaExceeded') {
+          return true; // Key is valid but quota exceeded
+        }
+        return false;
+      }
+      
+      return response.ok;
+    } catch (error) {
+      console.error('API key validation failed:', error);
+      return false;
+    }
+  }
+
+  async searchVideos(options: YouTubeSearchOptions): Promise<YouTubeSearchResult> {
+    const params = new URLSearchParams({
+      part: 'snippet',
+      type: 'video',
+      key: this.apiKey,
+      q: options.query,
+      maxResults: (options.maxResults || 25).toString(),
+      order: options.order || 'relevance',
+    });
+
+    // Add optional parameters
+    if (options.publishedAfter) {
+      params.append('publishedAfter', options.publishedAfter);
+    }
+    if (options.publishedBefore) {
+      params.append('publishedBefore', options.publishedBefore);
+    }
+    if (options.videoDuration) {
+      params.append('videoDuration', options.videoDuration);
+    }
+    if (options.videoDefinition) {
+      params.append('videoDefinition', options.videoDefinition);
+    }
+
+    const response = await fetch(`${this.baseUrl}/search?${params}`);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new YouTubeApiError(response.status, error.error?.message || 'Search failed', error);
+    }
+
+    const data = await response.json();
+    this.quotaUsed += 100; // Search operation costs 100 quota units
+
+    // Get detailed video information
+    const videoIds = data.items.map((item: any) => item.id.videoId);
+    const videos = await this.getVideoDetails(videoIds);
+
+    return {
+      videos,
+      nextPageToken: data.nextPageToken,
+      totalResults: data.pageInfo?.totalResults || 0,
+      quotaUsed: this.quotaUsed
+    };
+  }
+
+  async getVideoDetails(videoIds: string[]): Promise<Video[]> {
+    if (videoIds.length === 0) return [];
+
+    const params = new URLSearchParams({
+      part: 'snippet,statistics,contentDetails',
+      id: videoIds.join(','),
+      key: this.apiKey,
+    });
+
+    const response = await fetch(`${this.baseUrl}/videos?${params}`);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new YouTubeApiError(response.status, error.error?.message || 'Failed to get video details', error);
+    }
+
+    const data = await response.json();
+    this.quotaUsed += 1; // Videos operation costs 1 quota unit
+
+    return data.items.map((item: any) => this.mapYouTubeVideoToVideo(item));
+  }
+
+  private mapYouTubeVideoToVideo(youtubeVideo: any): Video {
+    const snippet = youtubeVideo.snippet;
+    const statistics = youtubeVideo.statistics;
+    const contentDetails = youtubeVideo.contentDetails;
+
+    return {
+      id: youtubeVideo.id,
+      youtube_id: youtubeVideo.id,
+      title: snippet.title,
+      channelTitle: snippet.channelTitle,
+      channel_id: snippet.channelId,
+      thumbnailUrl: snippet.thumbnails?.maxres?.url || 
+                   snippet.thumbnails?.high?.url || 
+                   snippet.thumbnails?.medium?.url || 
+                   snippet.thumbnails?.default?.url,
+      publishedAt: snippet.publishedAt,
+      description: snippet.description,
+      viewCount: parseInt(statistics?.viewCount || '0'),
+      duration: this.parseDuration(contentDetails?.duration),
+      language: snippet.defaultLanguage || snippet.defaultAudioLanguage || 'en',
+      relevanceScore: 0, // Will be calculated by AI analysis
+      keyPoints: [], // Will be populated by AI analysis
+    };
+  }
+
+  private parseDuration(isoDuration: string): string {
+    if (!isoDuration) return '0:00';
+    
+    const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return '0:00';
+
+    const hours = parseInt(match[1] || '0');
+    const minutes = parseInt(match[2] || '0');
+    const seconds = parseInt(match[3] || '0');
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else {
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+  }
+
+  getQuotaUsed(): number {
+    return this.quotaUsed;
+  }
+
+  resetQuotaTracking(): void {
+    this.quotaUsed = 0;
+  }
+}
+
+export class YouTubeApiError extends Error {
+  statusCode: number;
+  details?: any;
+
+  constructor(statusCode: number, message: string, details?: any) {
+    super(message);
+    this.statusCode = statusCode;
+    this.details = details;
+    this.name = 'YouTubeApiError';
+  }
+}
+```
+
+### Video Fetch API Route (`pages/api/videos/fetch.ts`):
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { YouTubeApiService } from '../../../lib/youtube-api';
+import { apiResponse, ApiError } from '../utils/response';
+import { Category } from '../../../src/types';
+
+interface FetchVideosRequest extends NextApiRequest {
+  body: {
+    categoryId: string;
+    maxResults?: number;
+    forceRefresh?: boolean;
+  };
+}
+
+export default async function handler(req: FetchVideosRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    throw new ApiError(405, 'Method not allowed');
+  }
+
+  try {
+    const { categoryId, maxResults = 25, forceRefresh = false } = req.body;
+
+    if (!categoryId) {
+      throw new ApiError(400, 'Category ID is required');
+    }
+
+    // TODO: Get user's YouTube API key from secure storage
+    const userApiKey = 'user-youtube-api-key'; // Placeholder
+
+    if (!userApiKey) {
+      throw new ApiError(401, 'YouTube API key not configured');
+    }
+
+    // TODO: Get category from database
+    const category: Category = {
+      id: categoryId,
+      name: 'Sample Category',
+      keywords: ['example', 'tutorial'],
+      // ... other fields
+    } as Category; // Placeholder
+
+    if (!category) {
+      throw new ApiError(404, 'Category not found');
+    }
+
+    // Create YouTube API service
+    const youtubeService = new YouTubeApiService({ apiKey: userApiKey });
+
+    // Build search query from category keywords
+    const searchQuery = category.keywords.join(' OR ');
+
+    // Fetch videos from YouTube
+    const searchResult = await youtubeService.searchVideos({
+      query: searchQuery,
+      maxResults,
+      order: 'relevance',
+      publishedAfter: getRecentDateISO(), // Only recent videos
+      videoDuration: 'medium', // Exclude very short videos
+    });
+
+    // Filter videos based on category settings
+    const filteredVideos = searchResult.videos.filter(video => {
+      // Basic filtering logic
+      return video.viewCount > 100 && // Minimum view count
+             video.title.length > 10 && // Meaningful titles
+             !isVideoBlacklisted(video); // Not in blacklist
+    });
+
+    // TODO: Save videos to database with category association
+    // TODO: Update category video count
+
+    // TODO: Log quota usage
+    console.log(`YouTube API quota used: ${searchResult.quotaUsed}`);
+
+    return apiResponse.success(res, {
+      videos: filteredVideos,
+      category: category,
+      totalFound: searchResult.totalResults,
+      quotaUsed: searchResult.quotaUsed,
+      fetchedAt: new Date().toISOString()
+    });
+
+  } catch (error) {
+    if (error instanceof YouTubeApiError) {
+      // Handle YouTube-specific errors
+      if (error.statusCode === 403) {
+        throw new ApiError(403, 'YouTube API quota exceeded or invalid permissions');
+      }
+      if (error.statusCode === 400) {
+        throw new ApiError(400, `YouTube API error: ${error.message}`);
+      }
+    }
+    
+    throw error;
+  }
+}
+
+function getRecentDateISO(): string {
+  const date = new Date();
+  date.setMonth(date.getMonth() - 6); // Last 6 months
+  return date.toISOString();
+}
+
+function isVideoBlacklisted(video: Video): boolean {
+  const blacklistedWords = ['spam', 'clickbait', 'fake'];
+  const title = video.title.toLowerCase();
+  
+  return blacklistedWords.some(word => title.includes(word));
+}
+
+// Configuration for the API route
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '1mb',
+    },
+    responseLimit: '10mb',
+  },
+  maxDuration: 30, // Allow longer execution for API calls
+};
+```
+
+### Video Search API Route (`pages/api/videos/search.ts`):
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { YouTubeApiService } from '../../../lib/youtube-api';
+import { apiResponse, ApiError } from '../utils/response';
+
+interface SearchVideosRequest extends NextApiRequest {
+  body: {
+    query: string;
+    maxResults?: number;
+    order?: 'relevance' | 'date' | 'rating' | 'viewCount';
+    filters?: {
+      duration?: 'short' | 'medium' | 'long';
+      publishedAfter?: string;
+      publishedBefore?: string;
+    };
+  };
+}
+
+export default async function handler(req: SearchVideosRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    throw new ApiError(405, 'Method not allowed');
+  }
+
+  try {
+    const { 
+      query, 
+      maxResults = 25, 
+      order = 'relevance',
+      filters = {}
+    } = req.body;
+
+    if (!query || query.trim().length === 0) {
+      throw new ApiError(400, 'Search query is required');
+    }
+
+    // TODO: Get user's YouTube API key from secure storage
+    const userApiKey = 'user-youtube-api-key'; // Placeholder
+
+    if (!userApiKey) {
+      throw new ApiError(401, 'YouTube API key not configured');
+    }
+
+    // Create YouTube API service
+    const youtubeService = new YouTubeApiService({ apiKey: userApiKey });
+
+    // Perform search
+    const searchResult = await youtubeService.searchVideos({
+      query: query.trim(),
+      maxResults,
+      order,
+      publishedAfter: filters.publishedAfter,
+      publishedBefore: filters.publishedBefore,
+      videoDuration: filters.duration,
+    });
+
+    return apiResponse.success(res, {
+      videos: searchResult.videos,
+      query,
+      totalResults: searchResult.totalResults,
+      quotaUsed: searchResult.quotaUsed,
+      searchedAt: new Date().toISOString()
+    });
+
+  } catch (error) {
+    return apiResponse.error(res, error);
+  }
+}
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '1mb',
+    },
+  },
+  maxDuration: 15,
+};
+```
+
+## Files to Create
+- `lib/youtube-api.ts` - Main YouTube API service
+- `pages/api/videos/fetch.ts` - Category-based video fetching
+- `pages/api/videos/search.ts` - Manual video search
+- `lib/youtube-cache.ts` - Caching layer for API responses
+- `lib/youtube-quota.ts` - Quota tracking and management
+
+## Dependencies
+- TASK_006 (YouTube API key management must exist)
+
+## YouTube API Integration Requirements
+
+### API Quota Management:
+- **Search Operations**: 100 units per request
+- **Video Details**: 1 unit per request
+- **Daily Limit**: 10,000 units by default
+- **Monitoring**: Track usage per user/category
+
+### Video Filtering Criteria:
+- **Minimum Views**: Filter out low-quality content
+- **Duration**: Exclude very short (< 1 min) or very long (> 2 hours) videos
+- **Language**: Support primary language filtering
+- **Date Range**: Focus on recent content
+- **Content Type**: Educational/tutorial content preferred
+
+### Error Handling:
+```typescript
+// Common YouTube API errors to handle
+const YOUTUBE_ERRORS = {
+  QUOTA_EXCEEDED: 'quotaExceeded',
+  INVALID_KEY: 'keyInvalid',
+  ACCESS_NOT_CONFIGURED: 'accessNotConfigured',
+  FORBIDDEN: 'forbidden',
+  NOT_FOUND: 'notFound'
+};
+```
+
+## Performance Optimizations
+
+### Caching Strategy:
+- **Video Metadata**: Cache for 24 hours
+- **Search Results**: Cache for 6 hours
+- **Channel Info**: Cache for 7 days
+- **Quota Tracking**: Real-time tracking
+
+### Batch Processing:
+- Process multiple video IDs in single API call (up to 50)
+- Batch category updates to reduce API calls
+- Queue video processing for large categories
+
+## Security Considerations
+- **API Key Protection**: Never expose keys in client-side code
+- **Rate Limiting**: Implement per-user rate limits
+- **Input Validation**: Sanitize all search queries
+- **Quota Monitoring**: Prevent quota exhaustion attacks
+
+## Testing Requirements
+- Test with valid and invalid API keys
+- Verify quota tracking accuracy
+- Test error handling for various API responses
+- Validate video metadata mapping
+- Test search functionality with different parameters
+
+## Implementation Notes
+- Use existing error handling patterns
+- Implement comprehensive logging for debugging
+- Add metrics for API performance monitoring
+- Consider implementing retry logic for transient failures
+- Cache frequently accessed data to reduce API calls
+
+## Definition of Done
+- YouTube API service fully implemented and tested
+- Video fetching endpoints functional
+- Search functionality working correctly
+- Error handling comprehensive
+- Quota tracking implemented
+- API key validation working
+- Integration with existing video display components
+- Performance optimizations in place 

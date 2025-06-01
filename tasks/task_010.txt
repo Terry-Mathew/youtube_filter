@@ -1,0 +1,175 @@
+# TASK_010: Set up OpenAI API integration for content analysis
+
+## Overview
+Create AI analysis service for video transcript processing and relevance scoring using OpenAI's API.
+
+## Acceptance Criteria
+- [ ] Implement OpenAI API client for transcript analysis
+- [ ] Create relevance scoring algorithm
+- [ ] Extract key insights from video content
+- [ ] Generate content summaries
+- [ ] Implement category matching logic
+- [ ] Add confidence scoring for AI analysis
+- [ ] Handle API rate limits and errors
+
+## Technical Requirements
+
+### OpenAI Analysis Service (`lib/openai-analysis.ts`):
+```typescript
+import OpenAI from 'openai';
+import { VideoAnalysis, Category } from '../src/types';
+
+export class OpenAIAnalysisService {
+  private client: OpenAI;
+
+  constructor(apiKey: string) {
+    this.client = new OpenAI({ apiKey });
+  }
+
+  async analyzeVideoContent(
+    transcript: string, 
+    category: Category, 
+    videoTitle: string
+  ): Promise<VideoAnalysis> {
+    const prompt = this.buildAnalysisPrompt(transcript, category, videoTitle);
+    
+    const response = await this.client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 1000,
+    });
+
+    const analysis = this.parseAnalysisResponse(response.choices[0].message.content);
+    
+    return {
+      id: crypto.randomUUID(),
+      video_id: '', // Will be set by caller
+      category_id: category.id,
+      relevance_score: analysis.relevanceScore,
+      quality_score: analysis.qualityScore,
+      key_insights: analysis.keyInsights,
+      summary: analysis.summary,
+      confidence_level: analysis.confidence,
+      analyzed_at: new Date().toISOString()
+    };
+  }
+
+  private buildAnalysisPrompt(transcript: string, category: Category, title: string): string {
+    return `
+Analyze this YouTube video for relevance to the category "${category.name}" with keywords: ${category.keywords.join(', ')}.
+
+Video Title: ${title}
+Video Transcript: ${transcript.slice(0, 3000)}
+
+Please provide:
+1. Relevance Score (0-100): How well does this video match the category?
+2. Quality Score (0-100): Educational value and content quality
+3. Key Insights (3-5 bullet points): Main takeaways from the video
+4. Summary (2-3 sentences): Brief overview of the video content
+5. Confidence (0-100): How confident are you in this analysis?
+
+Format your response as JSON:
+{
+  "relevanceScore": 85,
+  "qualityScore": 90,
+  "keyInsights": ["Point 1", "Point 2", "Point 3"],
+  "summary": "Brief summary here",
+  "confidence": 95
+}
+    `;
+  }
+
+  private parseAnalysisResponse(response: string): any {
+    try {
+      // Extract JSON from response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+      throw new Error('No valid JSON found in response');
+    } catch (error) {
+      console.error('Failed to parse AI response:', error);
+      return {
+        relevanceScore: 50,
+        qualityScore: 50,
+        keyInsights: ['Analysis failed'],
+        summary: 'Unable to analyze content',
+        confidence: 0
+      };
+    }
+  }
+}
+```
+
+### Analysis API Route (`pages/api/videos/[id]/analyze.ts`):
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { OpenAIAnalysisService } from '../../../../lib/openai-analysis';
+import { TranscriptExtractor } from '../../../../lib/transcript-extractor';
+import { apiResponse, ApiError } from '../../utils/response';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    throw new ApiError(405, 'Method not allowed');
+  }
+
+  try {
+    const { id } = req.query;
+    const { categoryId, forceReanalyze = false } = req.body;
+
+    if (!id || !categoryId) {
+      throw new ApiError(400, 'Video ID and Category ID are required');
+    }
+
+    // Get video transcript
+    const transcriptExtractor = new TranscriptExtractor();
+    const transcript = await transcriptExtractor.extractTranscript(id as string);
+
+    if (!transcript) {
+      throw new ApiError(404, 'No transcript available for analysis');
+    }
+
+    // TODO: Get category from database
+    const category = { 
+      id: categoryId, 
+      name: 'Sample', 
+      keywords: ['test'] 
+    } as any;
+
+    // TODO: Get OpenAI API key from environment
+    const openaiService = new OpenAIAnalysisService(process.env.OPENAI_API_KEY!);
+
+    // Perform analysis
+    const analysis = await openaiService.analyzeVideoContent(
+      transcript.fullText,
+      category,
+      'Video Title' // TODO: Get from video data
+    );
+
+    // TODO: Save analysis to database
+
+    return apiResponse.success(res, { analysis });
+  } catch (error) {
+    return apiResponse.error(res, error);
+  }
+}
+
+export const config = {
+  api: { maxDuration: 60 } // Allow longer execution for AI analysis
+};
+```
+
+## Files to Create
+- `lib/openai-analysis.ts` - AI analysis service
+- `pages/api/videos/[id]/analyze.ts` - Analysis API endpoint
+
+## Dependencies
+- TASK_009 (Transcript extraction must exist)
+
+## Definition of Done
+- OpenAI API integration implemented and tested
+- Video analysis endpoint functional
+- Relevance scoring working correctly
+- Key insights extraction functional
+- Error handling for API failures implemented 

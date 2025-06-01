@@ -1,0 +1,116 @@
+# TASK_008: Connect category-based video fetching to existing UI
+
+## Overview
+Integrate YouTube API results with existing SearchResults and VideoCard components to display category-filtered videos.
+
+## Acceptance Criteria
+- [ ] Update SearchResults to display category-filtered videos
+- [ ] Modify Home page to support category-based display
+- [ ] Add loading states for video fetching
+- [ ] Implement error handling for failed API calls
+- [ ] Add refresh functionality for categories
+- [ ] Show category context in video display
+- [ ] Handle empty category states
+
+## Technical Requirements
+
+### Modified SearchResults Component:
+```typescript
+const SearchResults: React.FC = () => {
+  const { videos, selectedCategory, isSearching, setCategoryVideos } = useAppStore();
+
+  const fetchCategoryVideos = async (categoryId: string) => {
+    try {
+      setIsSearching(true);
+      const response = await fetch('/api/videos/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryId, maxResults: 25 })
+      });
+      
+      const data = await response.json();
+      setCategoryVideos(categoryId, data.videos);
+    } catch (error) {
+      console.error('Failed to fetch videos:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCategory) {
+      fetchCategoryVideos(selectedCategory.id);
+    }
+  }, [selectedCategory]);
+
+  return (
+    <div className="space-y-6">
+      {selectedCategory && (
+        <CategoryHeader 
+          category={selectedCategory} 
+          onRefresh={() => fetchCategoryVideos(selectedCategory.id)}
+        />
+      )}
+      
+      {isSearching ? (
+        <VideoLoadingSkeleton />
+      ) : videos.length === 0 ? (
+        <EmptyVideoState category={selectedCategory} />
+      ) : (
+        <div className="grid gap-6">
+          {videos.map((video, index) => (
+            <VideoCard key={video.id} video={video} index={index} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+### Updated Home Page:
+```typescript
+const Home: React.FC = () => {
+  const { videos, selectedCategory, categories } = useAppStore();
+  const hasCategory = selectedCategory !== null;
+  const hasVideos = videos.length > 0;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-16">
+        {!hasCategory ? (
+          <CategoryPrompt />
+        ) : hasVideos ? (
+          <div className="py-8">
+            <SearchResults />
+          </div>
+        ) : (
+          <>
+            <Hero />
+            <div className="relative -mt-10 z-10">
+              <SearchBar />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+```
+
+## Files to Modify
+- `src/components/SearchResults.tsx` - Add category-based video display
+- `src/pages/Home.tsx` - Update main page logic
+- `src/components/CategoryHeader.tsx` - New component for category context
+- `src/components/EmptyVideoState.tsx` - Empty state for categories
+
+## Dependencies
+- TASK_007 (YouTube API integration must exist)
+- TASK_004 (CategorySelector must be implemented)
+
+## Definition of Done
+- Category-based video fetching integrated with UI
+- Loading and error states properly handled
+- Empty category states managed
+- Refresh functionality working
+- Integration with existing components complete 

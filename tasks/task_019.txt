@@ -1,0 +1,615 @@
+# TASK_019: Implement advanced video recommendation features
+
+## Overview
+Create sophisticated video recommendation and discovery features including smart filtering, recommendation algorithms, and personalized content delivery.
+
+## Acceptance Criteria
+- [ ] Implement smart video filtering and search
+- [ ] Create ML-based recommendation engine
+- [ ] Add personalized video discovery
+- [ ] Implement trending and popular video detection
+- [ ] Create custom recommendation presets
+- [ ] Add video similarity scoring
+- [ ] Implement advanced search with semantic understanding
+
+## Technical Requirements
+
+### Recommendation Engine (`lib/recommendation-engine.ts`):
+```typescript
+import { Video, Category, VideoAnalysis } from '../src/types';
+import { OpenAIService } from './openai-service';
+import { AnalyticsService } from './analytics-service';
+
+export interface RecommendationScore {
+  video_id: string;
+  score: number;
+  reasoning: string[];
+  categories: string[];
+}
+
+export interface UserPreferences {
+  preferred_categories: string[];
+  watched_videos: string[];
+  liked_topics: string[];
+  time_preferences: {
+    duration_min: number;
+    duration_max: number;
+  };
+  quality_threshold: number;
+}
+
+export class RecommendationEngine {
+  private openai: OpenAIService;
+  private analytics: AnalyticsService;
+
+  constructor() {
+    this.openai = OpenAIService.getInstance();
+    this.analytics = AnalyticsService.getInstance();
+  }
+
+  async generateRecommendations(
+    userId: string,
+    preferences: UserPreferences,
+    candidateVideos: Video[],
+    limit: number = 20
+  ): Promise<RecommendationScore[]> {
+    const userHistory = await this.getUserHistory(userId);
+    const categoryScores = await this.calculateCategoryAffinity(userId, preferences);
+    
+    const scoredVideos = await Promise.all(
+      candidateVideos.map(async (video) => {
+        const score = await this.calculateRecommendationScore(
+          video,
+          preferences,
+          userHistory,
+          categoryScores
+        );
+        return score;
+      })
+    );
+
+    return scoredVideos
+      .filter(score => score.score > 0.3) // Minimum threshold
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  private async calculateRecommendationScore(
+    video: Video,
+    preferences: UserPreferences,
+    userHistory: any[],
+    categoryScores: Map<string, number>
+  ): Promise<RecommendationScore> {
+    const reasoning: string[] = [];
+    let totalScore = 0;
+
+    // Category matching score (40% weight)
+    const categoryScore = this.calculateCategoryScore(video, preferences, categoryScores);
+    totalScore += categoryScore * 0.4;
+    if (categoryScore > 0.7) {
+      reasoning.push('Matches your preferred categories');
+    }
+
+    // Content quality score (25% weight)
+    const qualityScore = await this.calculateQualityScore(video);
+    totalScore += qualityScore * 0.25;
+    if (qualityScore > preferences.quality_threshold) {
+      reasoning.push('High-quality content based on AI analysis');
+    }
+
+    // Freshness score (15% weight)
+    const freshnessScore = this.calculateFreshnessScore(video);
+    totalScore += freshnessScore * 0.15;
+    if (freshnessScore > 0.8) {
+      reasoning.push('Recent and trending content');
+    }
+
+    // Diversity score (10% weight)
+    const diversityScore = this.calculateDiversityScore(video, userHistory);
+    totalScore += diversityScore * 0.1;
+    if (diversityScore > 0.7) {
+      reasoning.push('Introduces new perspectives');
+    }
+
+    // Duration preference score (10% weight)
+    const durationScore = this.calculateDurationScore(video, preferences);
+    totalScore += durationScore * 0.1;
+    if (durationScore > 0.8) {
+      reasoning.push('Matches your preferred video length');
+    }
+
+    return {
+      video_id: video.youtube_id,
+      score: Math.min(totalScore, 1.0),
+      reasoning,
+      categories: video.categories || []
+    };
+  }
+
+  private calculateCategoryScore(
+    video: Video,
+    preferences: UserPreferences,
+    categoryScores: Map<string, number>
+  ): number {
+    if (!video.categories || video.categories.length === 0) return 0;
+
+    let maxScore = 0;
+    for (const category of video.categories) {
+      const score = categoryScores.get(category) || 0;
+      maxScore = Math.max(maxScore, score);
+    }
+
+    return maxScore;
+  }
+
+  private async calculateQualityScore(video: Video): Promise<number> {
+    // Use AI analysis if available
+    if (video.ai_analysis?.overall_quality_score) {
+      return video.ai_analysis.overall_quality_score;
+    }
+
+    // Fallback to basic metrics
+    const viewsScore = Math.min(video.view_count / 100000, 1.0); // Normalize views
+    const likesRatio = video.like_count / (video.like_count + video.dislike_count || 1);
+    
+    return (viewsScore * 0.3 + likesRatio * 0.7);
+  }
+
+  private calculateFreshnessScore(video: Video): number {
+    const publishedDate = new Date(video.published_at);
+    const now = new Date();
+    const daysSincePublished = (now.getTime() - publishedDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    // Videos are "freshest" within first 7 days, decay over 30 days
+    if (daysSincePublished <= 7) return 1.0;
+    if (daysSincePublished <= 30) return 1.0 - (daysSincePublished - 7) / 23;
+    return 0.2; // Minimum score for older content
+  }
+
+  private calculateDiversityScore(video: Video, userHistory: any[]): number {
+    // Check if video introduces new topics/creators
+    const watchedChannels = userHistory.map(h => h.channel_id);
+    const watchedCategories = userHistory.flatMap(h => h.categories || []);
+
+    let diversityScore = 0.5; // Base score
+
+    if (!watchedChannels.includes(video.channel_id)) {
+      diversityScore += 0.3; // New channel
+    }
+
+    const newCategories = (video.categories || []).filter(
+      cat => !watchedCategories.includes(cat)
+    );
+    if (newCategories.length > 0) {
+      diversityScore += 0.2; // New categories
+    }
+
+    return Math.min(diversityScore, 1.0);
+  }
+
+  private calculateDurationScore(video: Video, preferences: UserPreferences): number {
+    const duration = this.parseDuration(video.duration);
+    const { duration_min, duration_max } = preferences.time_preferences;
+
+    if (duration >= duration_min && duration <= duration_max) {
+      return 1.0; // Perfect match
+    }
+
+    // Gradual penalty for duration mismatch
+    const deviation = Math.min(
+      Math.abs(duration - duration_min),
+      Math.abs(duration - duration_max)
+    );
+
+    return Math.max(0, 1.0 - deviation / (duration_max - duration_min));
+  }
+
+  private parseDuration(duration: string): number {
+    // Parse ISO 8601 duration format (PT15M33S)
+    const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!match) return 0;
+
+    const hours = parseInt(match[1]) || 0;
+    const minutes = parseInt(match[2]) || 0;
+    const seconds = parseInt(match[3]) || 0;
+
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  private async calculateCategoryAffinity(
+    userId: string,
+    preferences: UserPreferences
+  ): Promise<Map<string, number>> {
+    const affinityMap = new Map<string, number>();
+
+    // Initialize with explicit preferences
+    for (const category of preferences.preferred_categories) {
+      affinityMap.set(category, 0.9);
+    }
+
+    // Enhance with behavioral data
+    const userActivity = await this.analytics.getPerformanceMetrics(userId, '30d');
+    // Process category interactions, time spent, etc.
+    
+    return affinityMap;
+  }
+
+  private async getUserHistory(userId: string): Promise<any[]> {
+    // Fetch user's video interaction history
+    // This would typically come from your analytics/user activity database
+    return [];
+  }
+
+  // Smart search with semantic understanding
+  async smartSearch(
+    query: string,
+    videos: Video[],
+    userId?: string
+  ): Promise<Video[]> {
+    const searchEmbedding = await this.openai.generateEmbedding(query);
+    
+    const scoredVideos = await Promise.all(
+      videos.map(async (video) => {
+        const contentText = `${video.title} ${video.description} ${video.tags?.join(' ') || ''}`;
+        const videoEmbedding = await this.openai.generateEmbedding(contentText);
+        
+        const similarity = this.calculateCosineSimilarity(searchEmbedding, videoEmbedding);
+        
+        return {
+          video,
+          relevanceScore: similarity
+        };
+      })
+    );
+
+    return scoredVideos
+      .filter(item => item.relevanceScore > 0.7)
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+      .map(item => item.video);
+  }
+
+  private calculateCosineSimilarity(a: number[], b: number[]): number {
+    const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+    const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+    const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+    
+    return dotProduct / (magnitudeA * magnitudeB);
+  }
+}
+```
+
+### Advanced Search Component (`src/components/Search/AdvancedSearch.tsx`):
+```typescript
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent } from '../ui/Card';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
+import { Slider } from '../ui/Slider';
+import { Badge } from '../ui/Badge';
+import { useStore } from '../../store/useStore';
+
+export interface SearchFilters {
+  query: string;
+  categories: string[];
+  duration_min: number;
+  duration_max: number;
+  upload_date: 'any' | 'today' | 'week' | 'month' | 'year';
+  sort_by: 'relevance' | 'date' | 'views' | 'rating';
+  quality_min: number;
+}
+
+export const AdvancedSearch: React.FC = () => {
+  const { categories, searchVideos } = useStore();
+  const [filters, setFilters] = useState<SearchFilters>({
+    query: '',
+    categories: [],
+    duration_min: 0,
+    duration_max: 3600,
+    upload_date: 'any',
+    sort_by: 'relevance',
+    quality_min: 0.5
+  });
+  const [isSearching, setIsSearching] = useState(false);
+
+  const handleSearch = async () => {
+    setIsSearching(true);
+    try {
+      await searchVideos(filters);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const addCategory = (categoryId: string) => {
+    if (!filters.categories.includes(categoryId)) {
+      setFilters(prev => ({
+        ...prev,
+        categories: [...prev.categories, categoryId]
+      }));
+    }
+  };
+
+  const removeCategory = (categoryId: string) => {
+    setFilters(prev => ({
+      ...prev,
+      categories: prev.categories.filter(id => id !== categoryId)
+    }));
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  return (
+    <Card className="mb-6">
+      <CardContent className="p-6">
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium mb-2">Search Query</label>
+            <Input
+              type="text"
+              placeholder="Search for videos..."
+              value={filters.query}
+              onChange={(e) => setFilters(prev => ({ ...prev, query: e.target.value }))}
+              className="w-full"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Categories</label>
+            <Select
+              placeholder="Add categories..."
+              onValueChange={addCategory}
+            >
+              {categories
+                .filter(cat => !filters.categories.includes(cat.id))
+                .map(category => (
+                  <Select.Item key={category.id} value={category.id}>
+                    {category.name}
+                  </Select.Item>
+                ))}
+            </Select>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {filters.categories.map(categoryId => {
+                const category = categories.find(c => c.id === categoryId);
+                return category ? (
+                  <Badge key={categoryId} variant="secondary" className="cursor-pointer">
+                    {category.name}
+                    <button
+                      onClick={() => removeCategory(categoryId)}
+                      className="ml-2 text-xs hover:text-red-500"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ) : null;
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Duration</label>
+              <div className="space-y-3">
+                <Slider
+                  value={[filters.duration_min, filters.duration_max]}
+                  onValueChange={([min, max]) => 
+                    setFilters(prev => ({ ...prev, duration_min: min, duration_max: max }))
+                  }
+                  max={7200}
+                  step={60}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>{formatDuration(filters.duration_min)}</span>
+                  <span>{formatDuration(filters.duration_max)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Upload Date</label>
+              <Select
+                value={filters.upload_date}
+                onValueChange={(value) => 
+                  setFilters(prev => ({ ...prev, upload_date: value as any }))
+                }
+              >
+                <Select.Item value="any">Any time</Select.Item>
+                <Select.Item value="today">Today</Select.Item>
+                <Select.Item value="week">This week</Select.Item>
+                <Select.Item value="month">This month</Select.Item>
+                <Select.Item value="year">This year</Select.Item>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Sort by</label>
+              <Select
+                value={filters.sort_by}
+                onValueChange={(value) => 
+                  setFilters(prev => ({ ...prev, sort_by: value as any }))
+                }
+              >
+                <Select.Item value="relevance">Relevance</Select.Item>
+                <Select.Item value="date">Upload date</Select.Item>
+                <Select.Item value="views">View count</Select.Item>
+                <Select.Item value="rating">Rating</Select.Item>
+              </Select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Minimum Quality Score: {(filters.quality_min * 100).toFixed(0)}%
+              </label>
+              <Slider
+                value={[filters.quality_min]}
+                onValueChange={([value]) => 
+                  setFilters(prev => ({ ...prev, quality_min: value }))
+                }
+                max={1}
+                step={0.1}
+                className="w-full"
+              />
+            </div>
+          </div>
+
+          <Button
+            onClick={handleSearch}
+            disabled={isSearching}
+            className="w-full"
+          >
+            {isSearching ? 'Searching...' : 'Search with AI'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+```
+
+### Recommendation Widget (`src/components/Recommendations/RecommendationWidget.tsx`):
+```typescript
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardContent } from '../ui/Card';
+import { Button } from '../ui/Button';
+import { VideoCard } from '../VideoCard/VideoCard';
+import { RecommendationEngine, RecommendationScore } from '../../lib/recommendation-engine';
+import { useStore } from '../../store/useStore';
+import { Video } from '../../types';
+
+export const RecommendationWidget: React.FC = () => {
+  const { videos, categories } = useStore();
+  const [recommendations, setRecommendations] = useState<RecommendationScore[]>([]);
+  const [recommendedVideos, setRecommendedVideos] = useState<Video[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [engine] = useState(() => new RecommendationEngine());
+
+  const generateRecommendations = async () => {
+    setLoading(true);
+    try {
+      // Get user preferences (this would come from user settings)
+      const preferences = {
+        preferred_categories: categories.slice(0, 3).map(c => c.id),
+        watched_videos: [],
+        liked_topics: [],
+        time_preferences: {
+          duration_min: 300, // 5 minutes
+          duration_max: 1800 // 30 minutes
+        },
+        quality_threshold: 0.7
+      };
+
+      const scores = await engine.generateRecommendations(
+        'current-user', // TODO: Get actual user ID
+        preferences,
+        videos,
+        10
+      );
+
+      setRecommendations(scores);
+      
+      const videoMap = new Map(videos.map(v => [v.youtube_id, v]));
+      const recommended = scores
+        .map(score => videoMap.get(score.video_id))
+        .filter(Boolean) as Video[];
+      
+      setRecommendedVideos(recommended);
+    } catch (error) {
+      console.error('Failed to generate recommendations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (videos.length > 0) {
+      generateRecommendations();
+    }
+  }, [videos]);
+
+  if (recommendedVideos.length === 0 && !loading) {
+    return null;
+  }
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-semibold">Recommended for You</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={generateRecommendations}
+            disabled={loading}
+          >
+            {loading ? 'Generating...' : 'Refresh'}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {recommendedVideos.map((video, index) => {
+            const score = recommendations[index];
+            return (
+              <div key={video.youtube_id} className="relative">
+                <VideoCard video={video} showAnalysis />
+                {score && (
+                  <div className="mt-2 p-2 bg-blue-50 rounded text-xs">
+                    <div className="font-medium text-blue-800">
+                      {(score.score * 100).toFixed(0)}% match
+                    </div>
+                    <div className="text-blue-600 mt-1">
+                      {score.reasoning.slice(0, 2).join(', ')}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+```
+
+## Files to Create
+- `lib/recommendation-engine.ts` - ML-based recommendation system
+- `src/components/Search/AdvancedSearch.tsx` - Advanced search interface
+- `src/components/Recommendations/RecommendationWidget.tsx` - Personalized recommendations
+- `src/components/Discovery/TrendingVideos.tsx` - Trending content component
+- `lib/content-similarity.ts` - Video similarity calculations
+
+## Dependencies
+- TASK_010 (OpenAI integration must exist)
+- TASK_017 (Analytics must be functional)
+
+## Performance Requirements
+- **Recommendation Generation**: Sub-5 second response time
+- **Search Results**: Return within 2 seconds
+- **Similarity Calculations**: Batch processing for efficiency
+- **Caching**: Aggressive caching of embeddings and scores
+
+## Implementation Notes
+- Use vector embeddings for semantic similarity
+- Implement collaborative filtering for user-based recommendations
+- Cache recommendation scores to improve performance
+- Consider using a recommendation model training pipeline
+- Implement A/B testing for recommendation algorithms
+
+## Definition of Done
+- Advanced search working with semantic understanding
+- Recommendation engine generating personalized suggestions
+- Video similarity scoring functional
+- Smart filtering and discovery features operational
+- Performance metrics meeting requirements
+- User preference learning system active 

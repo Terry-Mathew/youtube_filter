@@ -1,0 +1,459 @@
+# TASK_002_005: Add category search and sorting functionality
+
+## Overview
+Implement comprehensive category search, sorting, and organization features in the Zustand store to help users efficiently manage and navigate large numbers of categories.
+
+## Acceptance Criteria
+- [ ] Text-based category search with fuzzy matching
+- [ ] Multiple sorting options (name, date, video count, relevance)
+- [ ] Category organization features (grouping, favorites)
+- [ ] Search history and saved searches
+- [ ] Advanced search filters
+- [ ] Keyboard shortcuts for search operations
+
+## Technical Requirements
+
+### Search State and Configuration:
+```typescript
+interface CategorySearchState {
+  // Search state
+  searchQuery: string;
+  searchHistory: string[];
+  savedSearches: SavedSearch[];
+  searchResults: CategoryId[];
+  
+  // Search configuration
+  searchOptions: {
+    fuzzyMatching: boolean;
+    searchFields: ('name' | 'description' | 'tags' | 'criteria')[];
+    caseSensitive: boolean;
+    maxResults: number;
+  };
+  
+  // Organization features
+  favoriteCategories: CategoryId[];
+  categoryGroups: CategoryGroup[];
+  recentlyUsed: CategoryId[];
+}
+
+interface SavedSearch {
+  id: string;
+  name: string;
+  query: string;
+  filters: CategorySearchFilters;
+  createdAt: Date;
+}
+
+interface CategoryGroup {
+  id: string;
+  name: string;
+  description: string;
+  categoryIds: CategoryId[];
+  color: CategoryColor;
+  icon?: string;
+}
+
+interface CategorySearchFilters {
+  colors?: CategoryColor[];
+  isActive?: boolean;
+  hasVideos?: boolean;
+  isAiSuggested?: boolean;
+  dateRange?: {
+    start: Date;
+    end: Date;
+  };
+  videoCountRange?: {
+    min: number;
+    max: number;
+  };
+}
+```
+
+### Search Implementation:
+```typescript
+// Advanced category search function
+searchCategories: (query: string, filters?: CategorySearchFilters) => CategoryId[] => {
+  const state = get();
+  
+  if (!query.trim() && !filters) {
+    return state.categories.map(c => c.id);
+  }
+
+  const searchOptions = state.searchOptions;
+  const normalizedQuery = searchOptions.caseSensitive 
+    ? query.trim() 
+    : query.trim().toLowerCase();
+
+  let results = state.categories.filter((category) => {
+    // Apply text search
+    if (normalizedQuery) {
+      const matchScore = calculateSearchScore(category, normalizedQuery, searchOptions);
+      if (matchScore === 0) return false;
+    }
+
+    // Apply filters
+    if (filters) {
+      if (filters.colors && !filters.colors.includes(category.color || 'blue')) return false;
+      if (filters.isActive !== undefined && category.isActive !== filters.isActive) return false;
+      if (filters.hasVideos !== undefined) {
+        const hasVideos = (category.videoCount || 0) > 0;
+        if (hasVideos !== filters.hasVideos) return false;
+      }
+      if (filters.isAiSuggested !== undefined && category.isAiSuggested !== filters.isAiSuggested) return false;
+      
+      if (filters.dateRange) {
+        const createdAt = category.createdAt.getTime();
+        if (createdAt < filters.dateRange.start.getTime() || 
+            createdAt > filters.dateRange.end.getTime()) return false;
+      }
+      
+      if (filters.videoCountRange) {
+        const videoCount = category.videoCount || 0;
+        if (videoCount < filters.videoCountRange.min || 
+            videoCount > filters.videoCountRange.max) return false;
+      }
+    }
+
+    return true;
+  });
+
+  // Sort by relevance if searching
+  if (normalizedQuery) {
+    results.sort((a, b) => {
+      const scoreA = calculateSearchScore(a, normalizedQuery, searchOptions);
+      const scoreB = calculateSearchScore(b, normalizedQuery, searchOptions);
+      return scoreB - scoreA;
+    });
+  }
+
+  // Limit results
+  results = results.slice(0, searchOptions.maxResults);
+
+  // Update search state
+  set((state) => ({
+    searchResults: results.map(c => c.id),
+    searchHistory: normalizedQuery 
+      ? [...new Set([normalizedQuery, ...state.searchHistory])].slice(0, 10)
+      : state.searchHistory,
+  }));
+
+  return results.map(c => c.id);
+};
+
+// Calculate search relevance score
+const calculateSearchScore = (
+  category: Category, 
+  query: string, 
+  options: CategorySearchState['searchOptions']
+): number => {
+  let score = 0;
+  const fields = options.searchFields;
+
+  // Exact matches get highest priority
+  if (fields.includes('name') && category.name.toLowerCase().includes(query)) {
+    score += category.name.toLowerCase() === query ? 100 : 50;
+  }
+
+  if (fields.includes('description') && category.description.toLowerCase().includes(query)) {
+    score += 30;
+  }
+
+  if (fields.includes('tags') && category.tags?.some(tag => tag.toLowerCase().includes(query))) {
+    score += 20;
+  }
+
+  if (fields.includes('criteria') && category.criteria.toLowerCase().includes(query)) {
+    score += 15;
+  }
+
+  // Fuzzy matching for partial matches
+  if (options.fuzzyMatching && score === 0) {
+    score += calculateFuzzyScore(category.name, query) * 10;
+  }
+
+  // Boost score for frequently used categories
+  const state = get();
+  if (state.recentlyUsed.includes(category.id)) {
+    score += 5;
+  }
+
+  if (state.favoriteCategories.includes(category.id)) {
+    score += 10;
+  }
+
+  return score;
+};
+
+// Fuzzy string matching
+const calculateFuzzyScore = (text: string, query: string): number => {
+  const textLower = text.toLowerCase();
+  const queryLower = query.toLowerCase();
+  
+  if (textLower.includes(queryLower)) return 1;
+  
+  // Calculate Levenshtein distance
+  const distance = levenshteinDistance(textLower, queryLower);
+  const maxLength = Math.max(textLower.length, queryLower.length);
+  
+  return Math.max(0, 1 - distance / maxLength);
+};
+
+const levenshteinDistance = (str1: string, str2: string): number => {
+  const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
+
+  for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
+  for (let j = 0; j <= str2.length; j++) matrix[j][0] = j;
+
+  for (let j = 1; j <= str2.length; j++) {
+    for (let i = 1; i <= str1.length; i++) {
+      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[j][i] = Math.min(
+        matrix[j][i - 1] + 1,
+        matrix[j - 1][i] + 1,
+        matrix[j - 1][i - 1] + indicator
+      );
+    }
+  }
+
+  return matrix[str2.length][str1.length];
+};
+```
+
+### Sorting and Organization:
+```typescript
+// Advanced sorting options
+interface SortOption {
+  field: 'name' | 'createdAt' | 'updatedAt' | 'videoCount' | 'relevance' | 'usage';
+  direction: 'asc' | 'desc';
+  label: string;
+}
+
+const SORT_OPTIONS: SortOption[] = [
+  { field: 'name', direction: 'asc', label: 'Name (A-Z)' },
+  { field: 'name', direction: 'desc', label: 'Name (Z-A)' },
+  { field: 'createdAt', direction: 'desc', label: 'Recently Created' },
+  { field: 'createdAt', direction: 'asc', label: 'Oldest First' },
+  { field: 'updatedAt', direction: 'desc', label: 'Recently Modified' },
+  { field: 'videoCount', direction: 'desc', label: 'Most Videos' },
+  { field: 'videoCount', direction: 'asc', label: 'Least Videos' },
+  { field: 'usage', direction: 'desc', label: 'Most Used' },
+  { field: 'relevance', direction: 'desc', label: 'Most Relevant' },
+];
+
+// Sort categories with advanced options
+sortCategories: (sortOption: SortOption) => Category[] => {
+  const state = get();
+  let categories = [...state.categories];
+
+  categories.sort((a, b) => {
+    let comparison = 0;
+
+    switch (sortOption.field) {
+      case 'name':
+        comparison = a.name.localeCompare(b.name);
+        break;
+      case 'createdAt':
+        comparison = a.createdAt.getTime() - b.createdAt.getTime();
+        break;
+      case 'updatedAt':
+        comparison = a.updatedAt.getTime() - b.updatedAt.getTime();
+        break;
+      case 'videoCount':
+        comparison = (a.videoCount || 0) - (b.videoCount || 0);
+        break;
+      case 'usage':
+        const usageA = state.recentlyUsed.indexOf(a.id);
+        const usageB = state.recentlyUsed.indexOf(b.id);
+        comparison = (usageA === -1 ? 999 : usageA) - (usageB === -1 ? 999 : usageB);
+        break;
+      case 'relevance':
+        // This would require current search context
+        comparison = 0;
+        break;
+    }
+
+    return sortOption.direction === 'desc' ? -comparison : comparison;
+  });
+
+  return categories;
+};
+
+// Category grouping and organization
+createCategoryGroup: (group: Omit<CategoryGroup, 'id'>) => string => {
+  const groupId = generateGroupId();
+  const newGroup: CategoryGroup = {
+    ...group,
+    id: groupId,
+  };
+
+  set((state) => ({
+    categoryGroups: [...state.categoryGroups, newGroup],
+  }));
+
+  return groupId;
+};
+
+addCategoryToGroup: (categoryId: CategoryId, groupId: string) => void => {
+  set((state) => ({
+    categoryGroups: state.categoryGroups.map((group) =>
+      group.id === groupId
+        ? {
+            ...group,
+            categoryIds: [...new Set([...group.categoryIds, categoryId])],
+          }
+        : group
+    ),
+  }));
+};
+
+// Favorite categories management
+toggleFavoriteCategory: (categoryId: CategoryId) => void => {
+  set((state) => ({
+    favoriteCategories: state.favoriteCategories.includes(categoryId)
+      ? state.favoriteCategories.filter((id) => id !== categoryId)
+      : [...state.favoriteCategories, categoryId],
+  }));
+};
+
+// Recently used categories tracking
+trackCategoryUsage: (categoryId: CategoryId) => void => {
+  set((state) => ({
+    recentlyUsed: [
+      categoryId,
+      ...state.recentlyUsed.filter((id) => id !== categoryId),
+    ].slice(0, 20), // Keep only last 20
+  }));
+};
+```
+
+### Saved Searches:
+```typescript
+// Save search functionality
+saveSearch: (name: string, query: string, filters?: CategorySearchFilters) => string => {
+  const searchId = generateSearchId();
+  const savedSearch: SavedSearch = {
+    id: searchId,
+    name,
+    query,
+    filters: filters || {},
+    createdAt: new Date(),
+  };
+
+  set((state) => ({
+    savedSearches: [...state.savedSearches, savedSearch],
+  }));
+
+  return searchId;
+};
+
+// Execute saved search
+executeSavedSearch: (searchId: string) => CategoryId[] => {
+  const state = get();
+  const savedSearch = state.savedSearches.find((s) => s.id === searchId);
+  
+  if (!savedSearch) return [];
+  
+  return state.searchCategories(savedSearch.query, savedSearch.filters);
+};
+
+// Delete saved search
+deleteSavedSearch: (searchId: string) => void => {
+  set((state) => ({
+    savedSearches: state.savedSearches.filter((s) => s.id !== searchId),
+  }));
+};
+```
+
+### Search Utilities and Helpers:
+```typescript
+// Clear search state
+clearSearch: () => void => {
+  set((state) => ({
+    searchQuery: '',
+    searchResults: [],
+  }));
+};
+
+// Update search options
+updateSearchOptions: (options: Partial<CategorySearchState['searchOptions']>) => void => {
+  set((state) => ({
+    searchOptions: {
+      ...state.searchOptions,
+      ...options,
+    },
+  }));
+};
+
+// Get search suggestions
+getSearchSuggestions: (partialQuery: string) => string[] => {
+  const state = get();
+  const suggestions = new Set<string>();
+
+  // Add from search history
+  state.searchHistory
+    .filter((query) => query.toLowerCase().includes(partialQuery.toLowerCase()))
+    .forEach((query) => suggestions.add(query));
+
+  // Add from category names
+  state.categories
+    .filter((cat) => cat.name.toLowerCase().includes(partialQuery.toLowerCase()))
+    .forEach((cat) => suggestions.add(cat.name));
+
+  // Add from tags
+  state.categories
+    .flatMap((cat) => cat.tags || [])
+    .filter((tag) => tag.toLowerCase().includes(partialQuery.toLowerCase()))
+    .forEach((tag) => suggestions.add(tag));
+
+  return Array.from(suggestions).slice(0, 10);
+};
+
+// Export search analytics
+getSearchAnalytics: () => SearchAnalytics => {
+  const state = get();
+  
+  return {
+    totalSearches: state.searchHistory.length,
+    uniqueQueries: new Set(state.searchHistory).size,
+    mostSearchedTerms: getMostFrequent(state.searchHistory, 5),
+    savedSearchCount: state.savedSearches.length,
+    favoriteCount: state.favoriteCategories.length,
+    groupCount: state.categoryGroups.length,
+  };
+};
+
+interface SearchAnalytics {
+  totalSearches: number;
+  uniqueQueries: number;
+  mostSearchedTerms: Array<{ term: string; count: number }>;
+  savedSearchCount: number;
+  favoriteCount: number;
+  groupCount: number;
+}
+```
+
+## Files to Modify
+- `src/store/index.ts` - Add search and sorting functionality to Zustand store
+
+## Dependencies
+- TASK_002_003 (Category selection and filtering must exist)
+- TASK_002_002 (Category CRUD operations must exist)
+- TASK_002_001 (Category state structure must exist)
+- TASK_001 (TypeScript interfaces must exist)
+
+## Implementation Notes
+- Optimize search performance for large category collections
+- Implement fuzzy search for better user experience
+- Support keyboard shortcuts for common search operations
+- Consider search result caching for frequently used queries
+- Prepare for future AI-powered search suggestions
+- Track search analytics for improving user experience
+
+## Definition of Done
+- Text search working with fuzzy matching
+- Multiple sorting options functional
+- Category favorites and groups implemented
+- Saved searches working correctly
+- Search suggestions and history functional
+- Performance optimized for large datasets
+- Search analytics available for insights 

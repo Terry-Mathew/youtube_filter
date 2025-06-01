@@ -1,0 +1,483 @@
+# TASK_017: Add usage analytics and quota monitoring
+
+## Overview
+Implement comprehensive analytics dashboard to track API usage, quota consumption, and application performance metrics.
+
+## Acceptance Criteria
+- [ ] Create analytics dashboard for API usage tracking
+- [ ] Implement YouTube API quota monitoring
+- [ ] Add OpenAI token usage tracking
+- [ ] Create usage alerts and limits
+- [ ] Set up performance metrics collection
+- [ ] Add user activity analytics
+- [ ] Implement cost tracking and estimation
+
+## Technical Requirements
+
+### Analytics Service (`lib/analytics-service.ts`):
+```typescript
+import { supabase } from './supabase';
+
+export interface AnalyticsEvent {
+  event_type: string;
+  user_id: string;
+  metadata: Record<string, any>;
+  timestamp: Date;
+}
+
+export interface UsageMetrics {
+  youtube_quota_used: number;
+  openai_tokens_used: number;
+  videos_processed: number;
+  categories_active: number;
+  api_calls_made: number;
+}
+
+export class AnalyticsService {
+  private static instance: AnalyticsService;
+
+  static getInstance(): AnalyticsService {
+    if (!AnalyticsService.instance) {
+      AnalyticsService.instance = new AnalyticsService();
+    }
+    return AnalyticsService.instance;
+  }
+
+  async trackEvent(event: AnalyticsEvent): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('analytics_events')
+        .insert({
+          event_type: event.event_type,
+          user_id: event.user_id,
+          metadata: event.metadata,
+          timestamp: event.timestamp.toISOString()
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Failed to track event:', error);
+    }
+  }
+
+  async trackApiUsage(userId: string, metrics: Partial<UsageMetrics>): Promise<void> {
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+      const { data: existing } = await supabase
+        .from('api_usage')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('date', today)
+        .single();
+
+      if (existing) {
+        // Update existing record
+        await supabase
+          .from('api_usage')
+          .update({
+            youtube_quota_used: (existing.youtube_quota_used || 0) + (metrics.youtube_quota_used || 0),
+            openai_tokens_used: (existing.openai_tokens_used || 0) + (metrics.openai_tokens_used || 0),
+            videos_processed: (existing.videos_processed || 0) + (metrics.videos_processed || 0),
+            api_calls_made: (existing.api_calls_made || 0) + 1
+          })
+          .eq('user_id', userId)
+          .eq('date', today);
+      } else {
+        // Create new record
+        await supabase
+          .from('api_usage')
+          .insert({
+            user_id: userId,
+            date: today,
+            youtube_quota_used: metrics.youtube_quota_used || 0,
+            openai_tokens_used: metrics.openai_tokens_used || 0,
+            videos_processed: metrics.videos_processed || 0,
+            api_calls_made: 1
+          });
+      }
+    } catch (error) {
+      console.error('Failed to track API usage:', error);
+    }
+  }
+
+  async getDailyUsage(userId: string, days: number = 30): Promise<any[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data, error } = await supabase
+      .from('api_usage')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', startDate.toISOString().split('T')[0])
+      .order('date', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getCurrentMonthUsage(userId: string): Promise<UsageMetrics> {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+
+    const { data, error } = await supabase
+      .from('api_usage')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', startOfMonth.toISOString().split('T')[0]);
+
+    if (error) throw error;
+
+    const totals = (data || []).reduce((acc, day) => ({
+      youtube_quota_used: acc.youtube_quota_used + (day.youtube_quota_used || 0),
+      openai_tokens_used: acc.openai_tokens_used + (day.openai_tokens_used || 0),
+      videos_processed: acc.videos_processed + (day.videos_processed || 0),
+      categories_active: 0, // Calculate separately
+      api_calls_made: acc.api_calls_made + (day.api_calls_made || 0)
+    }), {
+      youtube_quota_used: 0,
+      openai_tokens_used: 0,
+      videos_processed: 0,
+      categories_active: 0,
+      api_calls_made: 0
+    });
+
+    return totals;
+  }
+
+  async checkQuotaLimits(userId: string): Promise<{
+    youtube: { used: number; limit: number; percentage: number };
+    openai: { used: number; limit: number; percentage: number };
+    warnings: string[];
+  }> {
+    const usage = await this.getCurrentMonthUsage(userId);
+    
+    // Default limits (these should be configurable per user)
+    const YOUTUBE_MONTHLY_LIMIT = 10000;
+    const OPENAI_MONTHLY_LIMIT = 100000;
+
+    const warnings: string[] = [];
+    
+    const youtubePercentage = (usage.youtube_quota_used / YOUTUBE_MONTHLY_LIMIT) * 100;
+    const openaiPercentage = (usage.openai_tokens_used / OPENAI_MONTHLY_LIMIT) * 100;
+
+    if (youtubePercentage > 80) {
+      warnings.push('YouTube API quota usage is above 80%');
+    }
+    if (openaiPercentage > 80) {
+      warnings.push('OpenAI token usage is above 80%');
+    }
+
+    return {
+      youtube: {
+        used: usage.youtube_quota_used,
+        limit: YOUTUBE_MONTHLY_LIMIT,
+        percentage: youtubePercentage
+      },
+      openai: {
+        used: usage.openai_tokens_used,
+        limit: OPENAI_MONTHLY_LIMIT,
+        percentage: openaiPercentage
+      },
+      warnings
+    };
+  }
+
+  async getPerformanceMetrics(userId: string, timeframe: '24h' | '7d' | '30d' = '7d'): Promise<any> {
+    const hours = timeframe === '24h' ? 24 : timeframe === '7d' ? 168 : 720;
+    const startTime = new Date();
+    startTime.setHours(startTime.getHours() - hours);
+
+    const { data, error } = await supabase
+      .from('analytics_events')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('timestamp', startTime.toISOString())
+      .order('timestamp', { ascending: true });
+
+    if (error) throw error;
+
+    // Process events to extract performance metrics
+    const events = data || [];
+    const categoryViews = events.filter(e => e.event_type === 'category_viewed').length;
+    const videoClicks = events.filter(e => e.event_type === 'video_clicked').length;
+    const searchQueries = events.filter(e => e.event_type === 'search_performed').length;
+
+    return {
+      category_views: categoryViews,
+      video_clicks: videoClicks,
+      search_queries: searchQueries,
+      total_events: events.length,
+      timeframe
+    };
+  }
+}
+```
+
+### Analytics Dashboard API (`pages/api/analytics/dashboard.ts`):
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { AnalyticsService } from '../../../lib/analytics-service';
+import { apiResponse, ApiError } from '../utils/response';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    throw new ApiError(405, 'Method not allowed');
+  }
+
+  try {
+    // TODO: Get user ID from authentication
+    const userId = 'current-user-id';
+    const { timeframe = '7d' } = req.query;
+
+    const analytics = AnalyticsService.getInstance();
+
+    const [
+      currentUsage,
+      quotaLimits,
+      performanceMetrics,
+      dailyUsage
+    ] = await Promise.all([
+      analytics.getCurrentMonthUsage(userId),
+      analytics.checkQuotaLimits(userId),
+      analytics.getPerformanceMetrics(userId, timeframe as any),
+      analytics.getDailyUsage(userId, 30)
+    ]);
+
+    return apiResponse.success(res, {
+      usage: currentUsage,
+      quotas: quotaLimits,
+      performance: performanceMetrics,
+      daily_usage: dailyUsage,
+      generated_at: new Date().toISOString()
+    });
+
+  } catch (error) {
+    return apiResponse.error(res, error);
+  }
+}
+```
+
+### Usage Alert System (`lib/usage-alerts.ts`):
+```typescript
+import { AnalyticsService } from './analytics-service';
+
+export class UsageAlertSystem {
+  private analytics: AnalyticsService;
+
+  constructor() {
+    this.analytics = AnalyticsService.getInstance();
+  }
+
+  async checkAndSendAlerts(userId: string): Promise<void> {
+    const quotaStatus = await this.analytics.checkQuotaLimits(userId);
+
+    for (const warning of quotaStatus.warnings) {
+      await this.sendAlert(userId, 'quota_warning', warning);
+    }
+
+    // Check for approaching limits
+    if (quotaStatus.youtube.percentage > 90) {
+      await this.sendAlert(userId, 'quota_critical', 'YouTube API quota critically high');
+    }
+
+    if (quotaStatus.openai.percentage > 90) {
+      await this.sendAlert(userId, 'quota_critical', 'OpenAI token usage critically high');
+    }
+  }
+
+  private async sendAlert(userId: string, type: string, message: string): Promise<void> {
+    // Implementation for sending alerts (email, in-app notification, etc.)
+    console.log(`ALERT [${type}] for user ${userId}: ${message}`);
+    
+    await this.analytics.trackEvent({
+      event_type: 'alert_sent',
+      user_id: userId,
+      metadata: { alert_type: type, message },
+      timestamp: new Date()
+    });
+  }
+}
+```
+
+### Analytics React Components (`src/components/Analytics/AnalyticsDashboard.tsx`):
+```typescript
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardContent } from '../ui/Card';
+import { Progress } from '../ui/Progress';
+import { LineChart, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+
+interface AnalyticsData {
+  usage: any;
+  quotas: any;
+  performance: any;
+  daily_usage: any[];
+}
+
+export const AnalyticsDashboard: React.FC = () => {
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [timeframe, setTimeframe] = useState('7d');
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [timeframe]);
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/analytics/dashboard?timeframe=${timeframe}`);
+      const result = await response.json();
+      setData(result.data);
+    } catch (error) {
+      console.error('Failed to fetch analytics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div>Loading analytics...</div>;
+  if (!data) return <div>Failed to load analytics</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <QuotaCard
+          title="YouTube API"
+          used={data.quotas.youtube.used}
+          limit={data.quotas.youtube.limit}
+          percentage={data.quotas.youtube.percentage}
+        />
+        <QuotaCard
+          title="OpenAI Tokens"
+          used={data.quotas.openai.used}
+          limit={data.quotas.openai.limit}
+          percentage={data.quotas.openai.percentage}
+        />
+        <MetricCard
+          title="Videos Processed"
+          value={data.usage.videos_processed}
+          subtitle="This month"
+        />
+        <MetricCard
+          title="API Calls"
+          value={data.usage.api_calls_made}
+          subtitle="This month"
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <h3 className="text-lg font-semibold">Daily Usage Trends</h3>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={data.daily_usage}>
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <Line
+                type="monotone"
+                dataKey="youtube_quota_used"
+                stroke="#3b82f6"
+                name="YouTube Quota"
+              />
+              <Line
+                type="monotone"
+                dataKey="videos_processed"
+                stroke="#10b981"
+                name="Videos Processed"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+const QuotaCard: React.FC<{
+  title: string;
+  used: number;
+  limit: number;
+  percentage: number;
+}> = ({ title, used, limit, percentage }) => (
+  <Card>
+    <CardContent className="pt-6">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">{title}</span>
+        <span className="text-xs text-gray-500">{percentage.toFixed(1)}%</span>
+      </div>
+      <Progress value={percentage} className="mt-2" />
+      <p className="text-xs text-gray-500 mt-1">
+        {used.toLocaleString()} / {limit.toLocaleString()}
+      </p>
+    </CardContent>
+  </Card>
+);
+
+const MetricCard: React.FC<{
+  title: string;
+  value: number;
+  subtitle: string;
+}> = ({ title, value, subtitle }) => (
+  <Card>
+    <CardContent className="pt-6">
+      <div className="text-2xl font-bold">{value.toLocaleString()}</div>
+      <p className="text-xs text-gray-500">{title}</p>
+      <p className="text-xs text-gray-400">{subtitle}</p>
+    </CardContent>
+  </Card>
+);
+```
+
+## Files to Create
+- `lib/analytics-service.ts` - Core analytics tracking service
+- `lib/usage-alerts.ts` - Alert system for quota limits
+- `pages/api/analytics/dashboard.ts` - Analytics dashboard API
+- `pages/api/analytics/events.ts` - Event tracking API
+- `src/components/Analytics/AnalyticsDashboard.tsx` - Analytics dashboard UI
+- `database/analytics_tables.sql` - Analytics database tables
+
+## Dependencies
+- TASK_012 (Supabase database must be set up)
+- TASK_013 (User authentication must exist)
+
+## Analytics Tables (SQL):
+```sql
+-- Analytics events table
+CREATE TABLE analytics_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  event_type VARCHAR(100) NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  session_id VARCHAR(100),
+  ip_address INET,
+  user_agent TEXT
+);
+
+-- Performance monitoring table
+CREATE TABLE performance_metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  endpoint VARCHAR(200) NOT NULL,
+  response_time_ms INTEGER NOT NULL,
+  status_code INTEGER NOT NULL,
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for analytics queries
+CREATE INDEX idx_analytics_events_user_timestamp ON analytics_events(user_id, timestamp DESC);
+CREATE INDEX idx_analytics_events_type ON analytics_events(event_type);
+CREATE INDEX idx_api_usage_user_date ON api_usage(user_id, date);
+```
+
+## Definition of Done
+- Analytics service implemented and tracking events
+- Usage quota monitoring functional
+- Alerts system operational
+- Analytics dashboard displaying real-time data
+- Performance metrics collection working
+- Database optimized for analytics queries
+- Cost estimation features available 

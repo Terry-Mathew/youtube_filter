@@ -1,0 +1,145 @@
+# TASK_002: Extend Zustand store with category management
+
+## Overview
+Add category state management to the existing Zustand store, including CRUD operations for categories and category selection functionality.
+
+## Acceptance Criteria
+- [ ] Add categories array to store state
+- [ ] Add selectedCategory state for tracking active category
+- [ ] Implement category CRUD operations (create, read, update, delete)
+- [ ] Add category selection and switching functionality
+- [ ] Integrate with existing video filtering logic
+- [ ] Maintain existing store functionality without breaking changes
+
+## Technical Requirements
+
+### New State Properties:
+```typescript
+interface AppState {
+  // Existing properties...
+  
+  // Category management
+  categories: Category[];
+  selectedCategory: Category | null;
+  isCategoryLoading: boolean;
+  categoryError: string | null;
+  
+  // Category actions
+  setCategories: (categories: Category[]) => void;
+  addCategory: (category: Omit<Category, 'id' | 'created_at' | 'last_updated'>) => void;
+  updateCategory: (id: string, updates: Partial<Category>) => void;
+  deleteCategory: (id: string) => void;
+  selectCategory: (category: Category | null) => void;
+  
+  // Category-specific video filtering
+  getVideosByCategory: (categoryId: string) => Video[];
+  setCategoryVideos: (categoryId: string, videos: Video[]) => void;
+}
+```
+
+### Implementation Details:
+
+```typescript
+// Add to existing store
+export const useAppStore = create<AppState>((set, get) => ({
+  // Existing state...
+  
+  // Category state
+  categories: [],
+  selectedCategory: null,
+  isCategoryLoading: false,
+  categoryError: null,
+  
+  // Category actions
+  setCategories: (categories) => set({ categories }),
+  
+  addCategory: (categoryData) => set((state) => {
+    const newCategory: Category = {
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+      last_updated: new Date().toISOString(),
+      video_count: 0,
+      ...categoryData,
+    };
+    return {
+      categories: [...state.categories, newCategory],
+    };
+  }),
+  
+  updateCategory: (id, updates) => set((state) => ({
+    categories: state.categories.map(category =>
+      category.id === id
+        ? { ...category, ...updates, last_updated: new Date().toISOString() }
+        : category
+    ),
+  })),
+  
+  deleteCategory: (id) => set((state) => ({
+    categories: state.categories.filter(category => category.id !== id),
+    selectedCategory: state.selectedCategory?.id === id ? null : state.selectedCategory,
+  })),
+  
+  selectCategory: (category) => set({ selectedCategory: category }),
+  
+  // Category-specific video operations
+  getVideosByCategory: (categoryId) => {
+    const state = get();
+    // Return videos filtered by category
+    // This will be enhanced when we integrate with YouTube API
+    return state.videos; // Placeholder for now
+  },
+  
+  setCategoryVideos: (categoryId, videos) => set((state) => {
+    // Update video count for category
+    const updatedCategories = state.categories.map(category =>
+      category.id === categoryId
+        ? { ...category, video_count: videos.length, last_updated: new Date().toISOString() }
+        : category
+    );
+    
+    return {
+      videos,
+      categories: updatedCategories,
+    };
+  }),
+}));
+```
+
+## Files to Modify
+- `src/store/index.ts` - Extend existing store with category management
+
+## Dependencies
+- TASK_001 (TypeScript interfaces must be defined first)
+
+## Integration Points
+- Existing video state should work with category filtering
+- Search functionality should respect selected category
+- Settings page will use category management actions
+
+## Testing Requirements
+- Test category CRUD operations
+- Verify category selection updates correctly
+- Ensure existing store functionality remains intact
+- Test video filtering by category
+- Verify state persistence (localStorage integration)
+
+## Implementation Notes
+- Use existing store patterns and naming conventions
+- Implement optimistic updates where appropriate
+- Add error handling for category operations
+- Consider adding undo functionality for delete operations
+- Ensure proper cleanup when categories are deleted
+
+## Edge Cases to Handle
+- Deleting selected category should reset selection to null
+- Empty category list should show appropriate UI state
+- Category names should be unique per user
+- Handle concurrent category modifications
+
+## Definition of Done
+- All category CRUD operations implemented and tested
+- Category selection works correctly
+- Existing store functionality unaffected
+- Video filtering by category functional
+- Error states properly handled
+- TypeScript compilation succeeds without errors 

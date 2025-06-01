@@ -1,0 +1,224 @@
+# TASK_003_005: Integrate CategoryManager into Settings page
+
+## Overview
+Integrate the CategoryManager component into the existing Settings page with proper navigation, responsive layout, and consistent styling. Ensure seamless user experience within the existing app structure.
+
+## Acceptance Criteria
+- [ ] CategoryManager integrated into Settings page
+- [ ] Navigation tab or section for categories
+- [ ] Consistent styling with existing Settings components
+- [ ] Responsive layout on all screen sizes
+- [ ] Proper page transitions and loading states
+- [ ] Breadcrumb or back navigation
+- [ ] Settings page structure maintained
+
+## Technical Requirements
+
+### Settings Page Integration:
+```typescript
+// In src/pages/Settings.tsx
+
+"use client";
+
+import React, { useState } from "react";
+import { Settings as SettingsIcon, User, Bell, Shield, Folder } from "lucide-react";
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CategoryManager } from "@/components/CategoryManager";
+
+export default function Settings() {
+  const [activeTab, setActiveTab] = useState("general");
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-6xl">
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center">
+          <SettingsIcon className="mr-3 h-8 w-8" />
+          Settings
+        </h1>
+        <p className="text-gray-600 mt-2">
+          Manage your account preferences and application settings.
+        </p>
+      </div>
+
+      {/* Settings Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:w-auto">
+          <TabsTrigger value="general" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            General
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="flex items-center gap-2">
+            <Folder className="h-4 w-4" />
+            Categories
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger value="privacy" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Privacy
+          </TabsTrigger>
+        </TabsList>
+
+        {/* General Settings */}
+        <TabsContent value="general" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Settings</CardTitle>
+              <CardDescription>
+                Manage your profile information and preferences.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Existing general settings content */}
+              <p className="text-gray-600">General settings content...</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Categories Tab */}
+        <TabsContent value="categories" className="space-y-6">
+          <Card className="border-0 shadow-none p-0">
+            <CardContent className="p-0">
+              <CategoryManager />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Other existing tabs... */}
+        <TabsContent value="notifications" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification Preferences</CardTitle>
+              <CardDescription>
+                Choose how you want to be notified about updates.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600">Notification settings content...</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="privacy" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Privacy & Security</CardTitle>
+              <CardDescription>
+                Control your privacy settings and data preferences.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-gray-600">Privacy settings content...</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+```
+
+### Mobile Navigation Enhancement:
+```typescript
+// Mobile-responsive navigation
+const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+// Add mobile menu toggle in header
+<div className="md:hidden">
+  <Button
+    variant="ghost"
+    size="sm"
+    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+  >
+    <Menu className="h-5 w-5" />
+  </Button>
+</div>
+
+// Collapsible mobile menu
+{isMobileMenuOpen && (
+  <div className="md:hidden bg-white border-t">
+    <nav className="px-4 py-3 space-y-2">
+      {/* Mobile navigation items */}
+    </nav>
+  </div>
+)}
+```
+
+## shadcn/ui Components Required
+- `npx shadcn@latest add tabs`
+- `npx shadcn@latest add card` (already added)
+
+## Files to Create/Modify
+- `src/pages/Settings.tsx` - Main settings page integration
+- Update navigation components if needed
+
+## Dependencies
+- TASK_003_003 (CategoryManager component)
+- Existing Settings page structure
+- shadcn/ui components
+- lucide-react icons
+
+## Context7 Best Practices
+- Maintain consistent page structure
+- Use proper tab navigation patterns
+- Implement responsive breakpoints
+- Follow accessibility guidelines
+- Preserve existing functionality
+
+## Integration Requirements
+- Seamless integration with existing Settings
+- Consistent styling and spacing
+- Proper tab state management
+- Mobile-responsive design
+- Loading state coordination
+
+## Responsive Design
+- Tab navigation adapts to screen size
+- CategoryManager responds within Settings layout
+- Proper spacing on all devices
+- Touch-friendly navigation on mobile
+- Collapsible sections where appropriate
+
+## Accessibility Requirements
+- Proper tab navigation with keyboard
+- ARIA labels for tab content
+- Focus management between tabs
+- Screen reader friendly navigation
+- Consistent heading hierarchy
+
+## Testing Requirements
+- Test tab navigation functionality
+- Test responsive behavior on all devices
+- Test CategoryManager integration
+- Verify existing Settings functionality
+- Test keyboard navigation
+- Test mobile menu interactions
+
+## Implementation Notes
+- Preserve existing Settings page functionality
+- Use consistent styling patterns
+- Implement proper state management
+- Handle deep linking to categories tab
+- Ensure proper component isolation
+
+## Edge Cases
+- Handle empty categories in Settings context
+- Manage tab switching during form editing
+- Handle navigation away during operations
+- Preserve form state during tab switches
+- Handle deep links to specific tabs
+
+## Definition of Done
+- CategoryManager successfully integrated
+- Tab navigation working correctly
+- Responsive design verified
+- Existing Settings functionality preserved
+- Accessibility requirements met
+- Mobile navigation working
+- Deep linking to categories tab working
+- Component styling consistent with app 

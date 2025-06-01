@@ -1,0 +1,104 @@
+# TASK_001: Define TypeScript interfaces for Category and Video data models
+
+## Overview
+Extend existing types to include Category, CategorySettings, VideoAnalysis, and ApiUsage interfaces that will support the YouTube Filter functionality.
+
+## Acceptance Criteria
+- [ ] Add Category interface with id, name, keywords, settings, and user association
+- [ ] Add CategorySettings interface for user preferences per category
+- [ ] Extend existing Video interface with additional fields for AI analysis
+- [ ] Add VideoAnalysis interface for storing AI-generated insights
+- [ ] Add ApiUsage interface for tracking user quotas
+- [ ] Maintain backward compatibility with existing VideoCard and SearchResults components
+
+## Technical Requirements
+
+### New Interfaces to Add:
+
+```typescript
+interface Category {
+  id: string;
+  user_id: string;
+  name: string;
+  keywords: string[];
+  settings: CategorySettings;
+  video_count: number;
+  last_updated: string;
+  created_at: string;
+}
+
+interface CategorySettings {
+  min_relevance_score: number;
+  max_videos: number;
+  update_frequency: 'manual' | 'daily' | 'weekly';
+  content_types: string[];
+}
+
+interface VideoAnalysis {
+  id: string;
+  video_id: string;
+  category_id: string;
+  relevance_score: number;
+  quality_score: number;
+  key_insights: string[];
+  summary: string;
+  confidence_level: number;
+  analyzed_at: string;
+}
+
+interface ApiUsage {
+  user_id: string;
+  date: string;
+  youtube_quota_used: number;
+  openai_tokens_used: number;
+  videos_processed: number;
+}
+```
+
+### Extend Existing Video Interface:
+```typescript
+interface Video {
+  // Existing fields
+  id: string;
+  title: string;
+  channelTitle: string;
+  thumbnailUrl: string;
+  publishedAt: string;
+  viewCount: number;
+  relevanceScore: number;
+  keyPoints: string[];
+  duration: string;
+  
+  // New fields
+  youtube_id: string;
+  channel_id: string;
+  description: string;
+  transcript?: string;
+  language: string;
+  analysis?: VideoAnalysis;
+}
+```
+
+## Files to Modify
+- `src/types/index.ts` - Add new interfaces and extend existing ones
+
+## Dependencies
+- None (foundation task)
+
+## Testing Requirements
+- Verify TypeScript compilation with new interfaces
+- Ensure existing components still compile with extended Video interface
+- Add type validation for all new interfaces
+
+## Implementation Notes
+- Use existing naming conventions and coding style
+- Ensure all interfaces are properly exported
+- Add JSDoc comments for better documentation
+- Consider making optional fields truly optional with `?` syntax
+
+## Definition of Done
+- All new interfaces defined and exported
+- Existing Video interface extended without breaking changes
+- TypeScript compilation succeeds
+- No type errors in existing components
+- Interfaces include proper JSDoc documentation 

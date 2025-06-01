@@ -1,0 +1,662 @@
+# TASK_023: Set up CI/CD pipelines and deployment automation
+
+## Overview
+Implement comprehensive CI/CD pipelines with automated testing, building, and deployment to ensure reliable and efficient development workflow.
+
+## Acceptance Criteria
+- [ ] Configure GitHub Actions for automated CI/CD
+- [ ] Set up automated testing on pull requests
+- [ ] Implement automatic deployment to staging/production
+- [ ] Add code quality checks and linting
+- [ ] Configure environment-specific deployments
+- [ ] Set up monitoring and health checks
+- [ ] Implement rollback strategies
+
+## Technical Requirements
+
+### GitHub Actions Workflow (`.github/workflows/ci.yml`):
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '18'
+  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+
+jobs:
+  # Code Quality Checks
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Prettier check
+        run: npm run format:check
+
+      - name: Run TypeScript check
+        run: npm run type-check
+
+      - name: Check for security vulnerabilities
+        run: npm audit --audit-level=moderate
+
+  # Unit and Integration Tests
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: quality
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: youtube_filter_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:ci
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/youtube_filter_test
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage/lcov.info
+          fail_ci_if_error: true
+
+  # E2E Tests
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [quality, test]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start application
+        run: npm start &
+
+      - name: Wait for application to be ready
+        run: npx wait-on http://localhost:3000
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: e2e-test-results
+          path: test-results/
+
+  # Build and Docker Image
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [quality, test]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, e2e]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel (Staging)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+      - name: Run staging health checks
+        run: |
+          echo "Running health checks on staging environment..."
+          npx wait-on ${{ secrets.STAGING_URL }}/api/health --timeout 60000
+          curl -f ${{ secrets.STAGING_URL }}/api/health
+
+      - name: Notify team on Slack
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: '✅ Staging deployment successful'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, e2e]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel (Production)
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+          working-directory: ./
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+      - name: Run production health checks
+        run: |
+          echo "Running health checks on production environment..."
+          npx wait-on ${{ secrets.PRODUCTION_URL }}/api/health --timeout 60000
+          curl -f ${{ secrets.PRODUCTION_URL }}/api/health
+
+      - name: Notify team on Slack
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: '🚀 Production deployment successful'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create GitHub release
+        if: success()
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          body: |
+            Automated release created from commit ${{ github.sha }}
+            
+            ## Changes
+            ${{ github.event.head_commit.message }}
+          draft: false
+          prerelease: false
+```
+
+### Dockerfile for Production:
+```dockerfile
+# Multi-stage build for optimized production image
+FROM node:18-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./package.json
+
+# Automatically leverage output traces to reduce image size
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
+CMD ["node", "server.js"]
+```
+
+### Health Check API (`pages/api/health.ts`):
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { supabase } from '../../lib/supabase';
+
+interface HealthStatus {
+  status: 'healthy' | 'unhealthy';
+  timestamp: string;
+  version: string;
+  services: {
+    database: 'healthy' | 'unhealthy';
+    redis?: 'healthy' | 'unhealthy';
+    external_apis: {
+      youtube: 'healthy' | 'unhealthy';
+      openai: 'healthy' | 'unhealthy';
+    };
+  };
+  performance: {
+    uptime: number;
+    memory_usage: {
+      used: number;
+      total: number;
+      percentage: number;
+    };
+  };
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<HealthStatus>
+) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      version: process.env.APP_VERSION || '1.0.0',
+      services: {
+        database: 'unhealthy',
+        external_apis: {
+          youtube: 'unhealthy',
+          openai: 'unhealthy',
+        },
+      },
+      performance: {
+        uptime: process.uptime(),
+        memory_usage: {
+          used: 0,
+          total: 0,
+          percentage: 0,
+        },
+      },
+    } as HealthStatus);
+  }
+
+  try {
+    // Check database connection
+    const dbStart = Date.now();
+    const { error: dbError } = await supabase
+      .from('categories')
+      .select('count')
+      .limit(1);
+    
+    const dbHealthy = !dbError;
+    const dbResponseTime = Date.now() - dbStart;
+
+    // Check YouTube API
+    const youtubeHealthy = await checkYouTubeAPI();
+
+    // Check OpenAI API
+    const openaiHealthy = await checkOpenAIAPI();
+
+    // Memory usage
+    const memoryUsage = process.memoryUsage();
+    const totalMemory = memoryUsage.heapTotal;
+    const usedMemory = memoryUsage.heapUsed;
+
+    const healthStatus: HealthStatus = {
+      status: dbHealthy && youtubeHealthy && openaiHealthy ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      version: process.env.APP_VERSION || '1.0.0',
+      services: {
+        database: dbHealthy ? 'healthy' : 'unhealthy',
+        external_apis: {
+          youtube: youtubeHealthy ? 'healthy' : 'unhealthy',
+          openai: openaiHealthy ? 'healthy' : 'unhealthy',
+        },
+      },
+      performance: {
+        uptime: process.uptime(),
+        memory_usage: {
+          used: usedMemory,
+          total: totalMemory,
+          percentage: Math.round((usedMemory / totalMemory) * 100),
+        },
+      },
+    };
+
+    const statusCode = healthStatus.status === 'healthy' ? 200 : 503;
+    return res.status(statusCode).json(healthStatus);
+
+  } catch (error) {
+    console.error('Health check failed:', error);
+    
+    const memoryUsage = process.memoryUsage();
+    
+    return res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      version: process.env.APP_VERSION || '1.0.0',
+      services: {
+        database: 'unhealthy',
+        external_apis: {
+          youtube: 'unhealthy',
+          openai: 'unhealthy',
+        },
+      },
+      performance: {
+        uptime: process.uptime(),
+        memory_usage: {
+          used: memoryUsage.heapUsed,
+          total: memoryUsage.heapTotal,
+          percentage: Math.round((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100),
+        },
+      },
+    });
+  }
+}
+
+async function checkYouTubeAPI(): Promise<boolean> {
+  try {
+    if (!process.env.YOUTUBE_API_KEY) return false;
+    
+    const response = await fetch(
+      `https://youtube.googleapis.com/youtube/v3/search?part=snippet&q=test&maxResults=1&key=${process.env.YOUTUBE_API_KEY}`,
+      { timeout: 5000 }
+    );
+    
+    return response.ok;
+  } catch (error) {
+    console.error('YouTube API health check failed:', error);
+    return false;
+  }
+}
+
+async function checkOpenAIAPI(): Promise<boolean> {
+  try {
+    if (!process.env.OPENAI_API_KEY) return false;
+    
+    const response = await fetch('https://api.openai.com/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      timeout: 5000,
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('OpenAI API health check failed:', error);
+    return false;
+  }
+}
+```
+
+### Environment Configuration Scripts (`scripts/setup-env.sh`):
+```bash
+#!/bin/bash
+
+# Environment setup script for different deployment stages
+
+set -e
+
+ENVIRONMENT=${1:-development}
+
+echo "Setting up environment for: $ENVIRONMENT"
+
+case $ENVIRONMENT in
+  "development")
+    echo "Configuring development environment..."
+    cp .env.example .env.local
+    echo "Please update .env.local with your development credentials"
+    ;;
+    
+  "staging")
+    echo "Configuring staging environment..."
+    # Set staging-specific environment variables
+    export NEXT_PUBLIC_APP_ENV="staging"
+    export NEXT_PUBLIC_API_URL="https://staging-api.youtubefilter.com"
+    export DATABASE_URL="${STAGING_DATABASE_URL}"
+    export REDIS_URL="${STAGING_REDIS_URL}"
+    ;;
+    
+  "production")
+    echo "Configuring production environment..."
+    export NEXT_PUBLIC_APP_ENV="production"
+    export NEXT_PUBLIC_API_URL="https://api.youtubefilter.com"
+    export DATABASE_URL="${PRODUCTION_DATABASE_URL}"
+    export REDIS_URL="${PRODUCTION_REDIS_URL}"
+    ;;
+    
+  *)
+    echo "Unknown environment: $ENVIRONMENT"
+    echo "Usage: $0 [development|staging|production]"
+    exit 1
+    ;;
+esac
+
+echo "Environment setup complete for $ENVIRONMENT"
+```
+
+### Rollback Script (`scripts/rollback.sh`):
+```bash
+#!/bin/bash
+
+# Rollback script for production deployments
+
+set -e
+
+ENVIRONMENT=${1:-production}
+VERSION=${2}
+
+if [ -z "$VERSION" ]; then
+  echo "Usage: $0 <environment> <version>"
+  echo "Example: $0 production v1.2.3"
+  exit 1
+fi
+
+echo "Rolling back $ENVIRONMENT to version $VERSION..."
+
+case $ENVIRONMENT in
+  "staging")
+    echo "Rolling back staging environment..."
+    vercel rollback --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" "$VERSION"
+    ;;
+    
+  "production")
+    echo "Rolling back production environment..."
+    echo "⚠️  This will rollback the production environment!"
+    read -p "Are you sure? (y/N): " confirm
+    
+    if [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]]; then
+      vercel rollback --prod --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" "$VERSION"
+      echo "✅ Production rollback complete"
+      
+      # Notify team
+      curl -X POST "$SLACK_WEBHOOK_URL" \
+        -H 'Content-type: application/json' \
+        --data "{\"text\":\"🔄 Production rolled back to version $VERSION\"}"
+    else
+      echo "Rollback cancelled"
+      exit 1
+    fi
+    ;;
+    
+  *)
+    echo "Unknown environment: $ENVIRONMENT"
+    exit 1
+    ;;
+esac
+
+echo "Rollback complete"
+```
+
+### Package.json Scripts:
+```json
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "type-check": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --watchAll=false",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:all": "npm run test:ci && npm run test:e2e",
+    "setup:env": "./scripts/setup-env.sh",
+    "rollback": "./scripts/rollback.sh",
+    "health-check": "curl -f http://localhost:3000/api/health"
+  }
+}
+```
+
+## Files to Create
+- `.github/workflows/ci.yml` - Main CI/CD pipeline
+- `.github/workflows/security.yml` - Security scanning workflow
+- `Dockerfile` - Production Docker image
+- `docker-compose.yml` - Local development setup
+- `pages/api/health.ts` - Health check endpoint
+- `scripts/setup-env.sh` - Environment setup script
+- `scripts/rollback.sh` - Rollback script
+- `scripts/deploy.sh` - Manual deployment script
+
+## Dependencies
+- TASK_022 (Testing infrastructure must exist)
+
+## Environment Variables Setup:
+```bash
+# Required GitHub Secrets
+VERCEL_TOKEN
+VERCEL_ORG_ID
+VERCEL_PROJECT_ID
+STAGING_URL
+PRODUCTION_URL
+CODECOV_TOKEN
+SLACK_WEBHOOK_URL
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+OPENAI_API_KEY
+YOUTUBE_API_KEY
+```
+
+## Definition of Done
+- GitHub Actions workflows operational
+- Automated testing on all PRs
+- Staging deployments working automatically
+- Production deployments require approval
+- Health checks implemented and monitoring
+- Rollback procedures tested and documented
+- Security scanning integrated
+- Team notifications configured 

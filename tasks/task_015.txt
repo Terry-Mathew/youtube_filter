@@ -1,0 +1,59 @@
+# TASK_015: Add secure API key encryption and storage
+
+## Overview
+Implement encrypted storage of YouTube API keys in Supabase with proper security measures.
+
+## Acceptance Criteria
+- [ ] Implement client-side encryption for API keys
+- [ ] Store encrypted keys in Supabase securely
+- [ ] Add key rotation capabilities
+- [ ] Implement secure key retrieval
+- [ ] Add audit logging for key access
+- [ ] Ensure keys are never exposed in client code
+
+## Technical Requirements
+
+### Encryption Service:
+```typescript
+// lib/encryption.ts
+export class EncryptionService {
+  private static instance: EncryptionService;
+  
+  static getInstance(): EncryptionService {
+    if (!EncryptionService.instance) {
+      EncryptionService.instance = new EncryptionService();
+    }
+    return EncryptionService.instance;
+  }
+
+  async encryptApiKey(apiKey: string, userId: string): Promise<{
+    encryptedKey: string;
+    keyId: string;
+  }> {
+    // Implement encryption logic
+    const keyId = crypto.randomUUID();
+    const encryptedKey = await this.encrypt(apiKey, userId);
+    
+    return { encryptedKey, keyId };
+  }
+
+  async decryptApiKey(encryptedKey: string, keyId: string, userId: string): Promise<string> {
+    // Implement decryption logic
+    return await this.decrypt(encryptedKey, userId);
+  }
+}
+```
+
+## Files to Create
+- `lib/encryption.ts` - Encryption service
+- `pages/api/auth/youtube-key.ts` - Secure API key management
+
+## Dependencies
+- TASK_013 (Authentication must be implemented)
+- TASK_006 (API key management UI must exist)
+
+## Definition of Done
+- API keys encrypted and stored securely
+- Key retrieval working without exposing raw keys
+- Proper audit logging implemented
+- Security best practices followed 

@@ -1,0 +1,353 @@
+# TASK_003_003: Implement CategoryManager main component
+
+## Overview
+Build the main CategoryManager component that orchestrates category listing, search, and CRUD operations. This component integrates CategoryForm and CategoryListItem while managing state and user interactions.
+
+## Acceptance Criteria
+- [ ] CategoryManager component with category listing
+- [ ] Integration with CategoryForm for create/edit operations
+- [ ] Integration with CategoryListItem for display
+- [ ] Search and filter functionality
+- [ ] Empty state handling
+- [ ] Loading states management
+- [ ] Error handling and user feedback
+- [ ] Responsive layout with proper spacing
+- [ ] Export/import functionality preparation
+
+## Technical Requirements
+
+### Component Interface:
+```typescript
+interface CategoryManagerProps {
+  className?: string;
+}
+
+interface CategoryManagerState {
+  isFormOpen: boolean;
+  editingCategory: Category | null;
+  searchQuery: string;
+  isLoading: boolean;
+}
+```
+
+### Component Implementation:
+```typescript
+"use client";
+
+import React, { useState, useMemo } from "react";
+import { Plus, Search, Filter, Download, Upload, Loader2 } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAppStore } from "@/store";
+import { CategoryForm } from "@/components/ui/CategoryForm";
+import { CategoryListItem } from "@/components/ui/CategoryListItem";
+import { Category, CategoryId } from "@/types";
+import { cn } from "@/lib/utils";
+
+export function CategoryManager({ className }: CategoryManagerProps) {
+  const { 
+    categories, 
+    deleteCategory, 
+    searchCategories,
+    getFilteredCategories,
+    updateCategoryFilters,
+    categoryFilters,
+    categoriesLoading
+  } = useAppStore();
+
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [localSearchQuery, setLocalSearchQuery] = useState("");
+
+  // Filter categories based on search query
+  const filteredCategories = useMemo(() => {
+    if (!localSearchQuery.trim()) {
+      return getFilteredCategories();
+    }
+    
+    const searchResults = searchCategories(localSearchQuery);
+    return categories.filter(cat => searchResults.includes(cat.id));
+  }, [categories, localSearchQuery, searchCategories, getFilteredCategories]);
+
+  const handleCreateCategory = () => {
+    setEditingCategory(null);
+    setIsFormOpen(true);
+  };
+
+  const handleEditCategory = (category: Category) => {
+    setEditingCategory(category);
+    setIsFormOpen(true);
+  };
+
+  const handleDeleteCategory = async (categoryId: CategoryId) => {
+    try {
+      await deleteCategory(categoryId);
+    } catch (error) {
+      console.error("Failed to delete category:", error);
+      // Error handling will be enhanced in TASK_003_006
+    }
+  };
+
+  const handleFormClose = () => {
+    setIsFormOpen(false);
+    setEditingCategory(null);
+  };
+
+  const handleFormSuccess = () => {
+    setIsFormOpen(false);
+    setEditingCategory(null);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setLocalSearchQuery(value);
+    updateCategoryFilters({ searchQuery: value });
+  };
+
+  const isEmptyState = categories.length === 0;
+  const hasNoResults = filteredCategories.length === 0 && localSearchQuery.trim();
+
+  return (
+    <div className={cn("space-y-6", className)}>
+      {/* Header Section */}
+      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Learning Categories</h2>
+          <p className="text-gray-600 mt-1">
+            Organize your content into categories for better learning experiences.
+          </p>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isEmptyState}
+            className="hidden sm:flex"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden sm:flex"
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Import
+          </Button>
+          <Button onClick={handleCreateCategory}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Category
+          </Button>
+        </div>
+      </div>
+
+      {/* Search and Filter Section */}
+      {!isEmptyState && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search categories by name, description, or tags..."
+                  value={localSearchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Button variant="outline" size="sm">
+                <Filter className="mr-2 h-4 w-4" />
+                Filters
+              </Button>
+            </div>
+            
+            {/* Search Results Summary */}
+            {localSearchQuery.trim() && (
+              <div className="mt-4 text-sm text-gray-600">
+                {hasNoResults 
+                  ? `No categories found for "${localSearchQuery}"`
+                  : `${filteredCategories.length} category${filteredCategories.length !== 1 ? 'ies' : ''} found for "${localSearchQuery}"`
+                }
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading State */}
+      {categoriesLoading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <span className="ml-2 text-gray-600">Loading categories...</span>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {isEmptyState && !categoriesLoading && (
+        <Card className="text-center py-12">
+          <CardHeader>
+            <CardTitle className="text-xl text-gray-600">No Categories Yet</CardTitle>
+            <CardDescription className="text-base max-w-md mx-auto">
+              Create your first category to start organizing your learning content. 
+              Categories help you filter and discover relevant videos more efficiently.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={handleCreateCategory} size="lg">
+              <Plus className="mr-2 h-5 w-5" />
+              Create Your First Category
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No Search Results */}
+      {hasNoResults && !categoriesLoading && (
+        <Card className="text-center py-8">
+          <CardHeader>
+            <CardTitle className="text-lg text-gray-600">No Results Found</CardTitle>
+            <CardDescription>
+              Try adjusting your search terms or create a new category.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={handleCreateCategory} variant="outline">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Category
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Categories List */}
+      {!isEmptyState && !hasNoResults && !categoriesLoading && (
+        <div className="space-y-4">
+          {filteredCategories.map((category) => (
+            <CategoryListItem
+              key={category.id}
+              category={category}
+              onEdit={handleEditCategory}
+              onDelete={handleDeleteCategory}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Statistics Footer */}
+      {!isEmptyState && !categoriesLoading && (
+        <Card className="bg-gray-50">
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+              <div>
+                <div className="text-2xl font-bold text-gray-900">{categories.length}</div>
+                <div className="text-sm text-gray-600">Total Categories</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {categories.filter(cat => cat.isActive).length}
+                </div>
+                <div className="text-sm text-gray-600">Active</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {categories.reduce((sum, cat) => sum + (cat.videoCount || 0), 0)}
+                </div>
+                <div className="text-sm text-gray-600">Total Videos</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {categories.filter(cat => cat.isAiSuggested).length}
+                </div>
+                <div className="text-sm text-gray-600">AI Suggested</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Category Form Modal */}
+      <CategoryForm
+        category={editingCategory}
+        isOpen={isFormOpen}
+        onClose={handleFormClose}
+        onSuccess={handleFormSuccess}
+      />
+    </div>
+  );
+}
+```
+
+## shadcn/ui Components Required
+- `npx shadcn@latest add card`
+- `npx shadcn@latest add input`
+- `npx shadcn@latest add button`
+
+## Files to Create/Modify
+- `src/components/CategoryManager.tsx` - Main component
+
+## Dependencies
+- TASK_003_001 (CategoryForm component)
+- TASK_003_002 (CategoryListItem component)
+- TASK_002 (Zustand store with category management)
+- shadcn/ui components
+- lucide-react icons
+
+## Context7 Best Practices
+- Use React.useMemo for expensive computations
+- Implement proper state management
+- Handle loading and error states gracefully
+- Use semantic HTML for accessibility
+- Optimize re-renders with proper dependency arrays
+
+## State Management
+- Local state for UI interactions (form open/close, search)
+- Global state integration with Zustand store
+- Proper state synchronization between components
+- Optimistic UI updates where appropriate
+
+## Responsive Design
+- Mobile-first approach with responsive breakpoints
+- Flexible grid layout for statistics
+- Collapsible/expandable sections on mobile
+- Touch-friendly interaction areas
+
+## Performance Considerations
+- Memoized category filtering
+- Virtualization for large lists (future enhancement)
+- Debounced search input
+- Lazy loading of category statistics
+
+## Testing Requirements
+- Test empty state rendering
+- Test search functionality
+- Test CRUD operations through UI
+- Test responsive behavior
+- Test loading states
+- Test error scenarios
+
+## Implementation Notes
+- Use compound component pattern for flexibility
+- Implement keyboard shortcuts for common actions
+- Add proper loading indicators
+- Handle edge cases gracefully
+- Follow existing project patterns
+
+## Edge Cases
+- Handle empty search results
+- Manage concurrent CRUD operations
+- Handle network errors gracefully
+- Manage component unmounting during operations
+- Handle very large category lists
+
+## Definition of Done
+- CategoryManager component fully functional
+- All CRUD operations working through UI
+- Search and filter functionality working
+- Empty states properly handled
+- Loading states implemented
+- Integration with store complete
+- Responsive design verified
+- Component follows design patterns 

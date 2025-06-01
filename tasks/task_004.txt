@@ -1,0 +1,298 @@
+# TASK_004: Create CategorySelector component for main navigation
+
+## Overview
+Build a category switching interface that integrates with the existing header navigation, allowing users to quickly switch between different learning categories.
+
+## Acceptance Criteria
+- [ ] Create CategorySelector component for category navigation
+- [ ] Integrate with existing Header component design
+- [ ] Add active category highlighting
+- [ ] Support responsive design for mobile devices
+- [ ] Include category creation shortcut
+- [ ] Show video count per category
+- [ ] Add keyboard navigation support
+- [ ] Handle empty category state gracefully
+
+## Technical Requirements
+
+### Component Interface:
+```typescript
+interface CategorySelectorProps {
+  className?: string;
+  variant?: 'header' | 'sidebar' | 'dropdown';
+  showVideoCount?: boolean;
+  showCreateButton?: boolean;
+}
+
+interface CategoryItemProps {
+  category: Category;
+  isActive: boolean;
+  onClick: (category: Category) => void;
+  showVideoCount?: boolean;
+}
+```
+
+### Core Features:
+
+1. **Category Navigation**
+   - Dropdown or tab-based category selection
+   - Active category highlighting
+   - Smooth transitions between categories
+   - Video count badges
+
+2. **Integration Points**
+   - Seamless integration with existing Header
+   - Consistent styling with current navigation
+   - Mobile-responsive behavior
+   - Keyboard accessibility
+
+3. **User Experience**
+   - Quick category switching
+   - Visual feedback for active category
+   - Loading states during category changes
+   - Empty state messaging
+
+### Implementation Example:
+```typescript
+const CategorySelector: React.FC<CategorySelectorProps> = ({
+  className,
+  variant = 'header',
+  showVideoCount = true,
+  showCreateButton = true
+}) => {
+  const { 
+    categories, 
+    selectedCategory, 
+    selectCategory, 
+    isLoading 
+  } = useAppStore();
+  
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleCategorySelect = (category: Category) => {
+    selectCategory(category);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className={cn("relative", className)}>
+      {/* Category Dropdown Trigger */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+      >
+        <FolderOpen className="h-4 w-4" />
+        <span className="truncate max-w-32">
+          {selectedCategory?.name || 'Select Category'}
+        </span>
+        {showVideoCount && selectedCategory && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+            {selectedCategory.video_count}
+          </span>
+        )}
+        <ChevronDown className={cn(
+          "h-4 w-4 transition-transform",
+          isOpen && "rotate-180"
+        )} />
+      </button>
+
+      {/* Category Dropdown Menu */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute z-50 mt-2 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
+          >
+            <div className="py-1" role="listbox">
+              {categories.length === 0 ? (
+                <div className="px-4 py-8 text-center">
+                  <FolderOpen className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-500 mb-3">No categories yet</p>
+                  {showCreateButton && (
+                    <button
+                      onClick={() => {
+                        // Trigger category creation modal
+                        setIsOpen(false);
+                      }}
+                      className="btn-primary text-sm"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Create Category
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {categories.map((category) => (
+                    <CategoryItem
+                      key={category.id}
+                      category={category}
+                      isActive={selectedCategory?.id === category.id}
+                      onClick={handleCategorySelect}
+                      showVideoCount={showVideoCount}
+                    />
+                  ))}
+                  
+                  {showCreateButton && (
+                    <div className="border-t border-gray-100 py-1">
+                      <button
+                        onClick={() => {
+                          // Trigger category creation
+                          setIsOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add New Category
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const CategoryItem: React.FC<CategoryItemProps> = ({
+  category,
+  isActive,
+  onClick,
+  showVideoCount
+}) => {
+  return (
+    <button
+      onClick={() => onClick(category)}
+      className={cn(
+        "w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-colors",
+        isActive 
+          ? "bg-primary-50 text-primary-700" 
+          : "text-gray-700 hover:bg-gray-50"
+      )}
+      role="option"
+      aria-selected={isActive}
+    >
+      <div className="flex items-center min-w-0">
+        <span className="truncate font-medium">{category.name}</span>
+      </div>
+      
+      {showVideoCount && (
+        <span className={cn(
+          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+          isActive 
+            ? "bg-primary-100 text-primary-800"
+            : "bg-gray-100 text-gray-600"
+        )}>
+          {category.video_count}
+        </span>
+      )}
+    </button>
+  );
+};
+```
+
+## Files to Modify
+- `src/components/CategorySelector.tsx` - Main category selector component
+- `src/components/Header.tsx` - Integrate CategorySelector into header
+- `src/components/ui/CategoryItem.tsx` - Individual category item component
+
+## Dependencies
+- TASK_002 (Store must have category management functionality)
+
+## Integration with Existing Components
+- **Header Component**: Add CategorySelector to main navigation
+- **Existing Navigation**: Maintain current navigation patterns
+- **Mobile Menu**: Ensure proper mobile responsive behavior
+- **Styling**: Use existing Tailwind classes and color scheme
+
+## UI/UX Requirements
+
+### Visual Design:
+- **Dropdown Style**: Clean dropdown with proper shadows and borders
+- **Active States**: Clear visual indication of selected category
+- **Hover Effects**: Smooth hover transitions
+- **Icons**: Use Lucide React icons consistent with existing design
+
+### Responsive Behavior:
+- **Desktop**: Dropdown menu with full category names
+- **Mobile**: Collapsible menu or sheet overlay
+- **Tablet**: Adaptive layout based on screen size
+
+### Accessibility:
+- **Keyboard Navigation**: Arrow keys, Enter, Escape support
+- **Screen Readers**: Proper ARIA labels and roles
+- **Focus Management**: Clear focus indicators and logical tab order
+
+## Keyboard Navigation:
+```typescript
+const handleKeyDown = (event: KeyboardEvent) => {
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault();
+      // Move to next category
+      break;
+    case 'ArrowUp':
+      event.preventDefault();
+      // Move to previous category
+      break;
+    case 'Enter':
+    case ' ':
+      event.preventDefault();
+      // Select current category
+      break;
+    case 'Escape':
+      setIsOpen(false);
+      break;
+  }
+};
+```
+
+## State Management Integration:
+- Use existing store selectors for categories
+- Handle loading states during category switching
+- Update URL when category changes (optional)
+- Persist selected category in localStorage
+
+## Testing Requirements
+- Test category selection updates store correctly
+- Verify keyboard navigation works properly
+- Test responsive behavior on different screen sizes
+- Ensure accessibility standards are met
+- Test empty state and error handling
+
+## Performance Considerations
+- Lazy load category video counts if needed
+- Debounce category switching to prevent rapid API calls
+- Use React.memo for CategoryItem optimization
+- Implement proper cleanup for event listeners
+
+## Implementation Notes
+- Follow existing component patterns from Header
+- Use existing utility functions for styling
+- Implement proper loading states
+- Add analytics tracking for category switches
+- Cache category data to reduce API calls
+
+## Edge Cases
+- Handle very long category names with truncation
+- Manage large numbers of categories (scrolling)
+- Handle network errors gracefully
+- Prevent rapid clicking/switching
+- Manage concurrent category updates
+
+## Definition of Done
+- CategorySelector component fully functional
+- Integration with Header component complete
+- Responsive design working on all devices
+- Keyboard navigation implemented and tested
+- Accessibility requirements met
+- Empty and error states handled properly
+- Performance optimized for smooth interactions
+- Unit tests written for core functionality 

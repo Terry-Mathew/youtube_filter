@@ -1,0 +1,441 @@
+# TASK_002_004: Add category persistence with localStorage
+
+## Overview
+Implement localStorage persistence for categories and category settings with proper serialization, hydration, and error handling to maintain user data across browser sessions.
+
+## Acceptance Criteria
+- [ ] Categories persisted to localStorage on state changes
+- [ ] Category settings persisted separately for performance
+- [ ] Proper serialization and deserialization of branded types
+- [ ] Error handling for corrupted or invalid localStorage data
+- [ ] Migration support for data format changes
+- [ ] Selective persistence (exclude temporary state)
+
+## Technical Requirements
+
+### Storage Configuration:
+```typescript
+// Storage keys for different data types
+const STORAGE_KEYS = {
+  CATEGORIES: 'youtube-filter-categories',
+  CATEGORY_SETTINGS: 'youtube-filter-category-settings',
+  CATEGORY_SELECTIONS: 'youtube-filter-category-selections',
+  CATEGORY_FILTERS: 'youtube-filter-category-filters',
+  STORAGE_VERSION: 'youtube-filter-storage-version',
+} as const;
+
+// Current storage version for migration support
+const CURRENT_STORAGE_VERSION = '1.0.0';
+
+interface StorageData {
+  version: string;
+  timestamp: number;
+  data: any;
+}
+```
+
+### Persistence Utilities:
+```typescript
+// Safe localStorage operations with error handling
+const storage = {
+  set: (key: string, value: any): boolean => {
+    try {
+      const storageData: StorageData = {
+        version: CURRENT_STORAGE_VERSION,
+        timestamp: Date.now(),
+        data: value,
+      };
+      localStorage.setItem(key, JSON.stringify(storageData));
+      return true;
+    } catch (error) {
+      console.error(`Failed to save to localStorage (${key}):`, error);
+      return false;
+    }
+  },
+
+  get: <T>(key: string, defaultValue: T): T => {
+    try {
+      const item = localStorage.getItem(key);
+      if (!item) return defaultValue;
+
+      const storageData: StorageData = JSON.parse(item);
+      
+      // Check version compatibility
+      if (storageData.version !== CURRENT_STORAGE_VERSION) {
+        console.warn(`Storage version mismatch for ${key}. Expected ${CURRENT_STORAGE_VERSION}, got ${storageData.version}`);
+        return migrateStorageData(key, storageData) || defaultValue;
+      }
+
+      return storageData.data as T;
+    } catch (error) {
+      console.error(`Failed to load from localStorage (${key}):`, error);
+      return defaultValue;
+    }
+  },
+
+  remove: (key: string): boolean => {
+    try {
+      localStorage.removeItem(key);
+      return true;
+    } catch (error) {
+      console.error(`Failed to remove from localStorage (${key}):`, error);
+      return false;
+    }
+  },
+
+  clear: (): boolean => {
+    try {
+      Object.values(STORAGE_KEYS).forEach((key) => {
+        localStorage.removeItem(key);
+      });
+      return true;
+    } catch (error) {
+      console.error('Failed to clear localStorage:', error);
+      return false;
+    }
+  },
+};
+```
+
+### Data Serialization:
+```typescript
+// Custom serialization for branded types and Date objects
+const serialize = {
+  categories: (categories: Category[]): any[] => {
+    return categories.map((category) => ({
+      ...category,
+      createdAt: category.createdAt.toISOString(),
+      updatedAt: category.updatedAt.toISOString(),
+    }));
+  },
+
+  categorySettings: (settings: Record<CategoryId, CategorySettings>): Record<string, any> => {
+    return Object.fromEntries(
+      Object.entries(settings).map(([key, value]) => [
+        key,
+        {
+          ...value,
+          updatedAt: value.updatedAt.toISOString(),
+        },
+      ])
+    );
+  },
+};
+
+const deserialize = {
+  categories: (data: any[]): Category[] => {
+    return data
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        ...item,
+        id: item.id as CategoryId,
+        userId: item.userId as UserId,
+        createdAt: new Date(item.createdAt),
+        updatedAt: new Date(item.updatedAt),
+        tags: item.tags || [],
+        videoCount: item.videoCount || 0,
+        sortOrder: item.sortOrder || 0,
+        isAiSuggested: item.isAiSuggested || false,
+      }))
+      .filter((category) => validateCategory(category));
+  },
+
+  categorySettings: (data: Record<string, any>): Record<CategoryId, CategorySettings> => {
+    return Object.fromEntries(
+      Object.entries(data)
+        .filter(([_, value]) => value && typeof value === 'object')
+        .map(([key, value]) => [
+          key as CategoryId,
+          {
+            ...value,
+            categoryId: key as CategoryId,
+            updatedAt: new Date(value.updatedAt),
+          },
+        ])
+    );
+  },
+};
+```
+
+### Store Persistence Integration:
+```typescript
+// Add persistence layer to Zustand store
+interface PersistenceState {
+  // Loading states
+  isHydrating: boolean;
+  persistenceError: string | null;
+  lastSaved: Date | null;
+  
+  // Actions
+  loadFromStorage: () => Promise<void>;
+  saveToStorage: () => Promise<void>;
+  clearStorage: () => Promise<void>;
+  exportData: () => string;
+  importData: (data: string) => Promise<boolean>;
+}
+
+// Persistence actions
+const persistenceActions = {
+  loadFromStorage: async () => {
+    set((state) => ({ isHydrating: true, persistenceError: null }));
+
+    try {
+      // Load categories
+      const categoriesData = storage.get(STORAGE_KEYS.CATEGORIES, []);
+      const categories = deserialize.categories(categoriesData);
+
+      // Load category settings
+      const settingsData = storage.get(STORAGE_KEYS.CATEGORY_SETTINGS, {});
+      const categorySettings = deserialize.categorySettings(settingsData);
+
+      // Load category selections
+      const selections = storage.get(STORAGE_KEYS.CATEGORY_SELECTIONS, {
+        selectedCategoryIds: [],
+        activeCategoryId: null,
+      });
+
+      // Load category filters
+      const filters = storage.get(STORAGE_KEYS.CATEGORY_FILTERS, {
+        searchQuery: '',
+        sortBy: 'name',
+        sortOrder: 'asc',
+        showInactive: false,
+      });
+
+      set((state) => ({
+        categories,
+        categorySettings,
+        selectedCategoryIds: selections.selectedCategoryIds.map((id: string) => id as CategoryId),
+        activeCategoryId: selections.activeCategoryId as CategoryId | null,
+        categoryFilters: filters,
+        isHydrating: false,
+        lastSaved: new Date(),
+      }));
+
+      console.log('Successfully loaded data from localStorage');
+    } catch (error) {
+      console.error('Failed to load from localStorage:', error);
+      set((state) => ({
+        isHydrating: false,
+        persistenceError: 'Failed to load saved data',
+      }));
+    }
+  },
+
+  saveToStorage: async () => {
+    const state = get();
+    
+    try {
+      // Save categories
+      const categoriesData = serialize.categories(state.categories);
+      storage.set(STORAGE_KEYS.CATEGORIES, categoriesData);
+
+      // Save category settings
+      const settingsData = serialize.categorySettings(state.categorySettings);
+      storage.set(STORAGE_KEYS.CATEGORY_SETTINGS, settingsData);
+
+      // Save category selections
+      storage.set(STORAGE_KEYS.CATEGORY_SELECTIONS, {
+        selectedCategoryIds: state.selectedCategoryIds,
+        activeCategoryId: state.activeCategoryId,
+      });
+
+      // Save category filters
+      storage.set(STORAGE_KEYS.CATEGORY_FILTERS, state.categoryFilters);
+
+      set((state) => ({
+        lastSaved: new Date(),
+        persistenceError: null,
+      }));
+
+      console.log('Successfully saved data to localStorage');
+    } catch (error) {
+      console.error('Failed to save to localStorage:', error);
+      set((state) => ({
+        persistenceError: 'Failed to save data',
+      }));
+    }
+  },
+
+  clearStorage: async () => {
+    try {
+      storage.clear();
+      
+      // Reset to initial state
+      set((state) => ({
+        categories: [],
+        categorySettings: {},
+        selectedCategoryIds: [],
+        activeCategoryId: null,
+        categoryFilters: {
+          searchQuery: '',
+          sortBy: 'name',
+          sortOrder: 'asc',
+          showInactive: false,
+        },
+        lastSaved: null,
+        persistenceError: null,
+      }));
+
+      console.log('Successfully cleared localStorage');
+    } catch (error) {
+      console.error('Failed to clear localStorage:', error);
+      set((state) => ({
+        persistenceError: 'Failed to clear data',
+      }));
+    }
+  },
+
+  exportData: () => {
+    const state = get();
+    
+    const exportData = {
+      version: CURRENT_STORAGE_VERSION,
+      exportDate: new Date().toISOString(),
+      categories: serialize.categories(state.categories),
+      categorySettings: serialize.categorySettings(state.categorySettings),
+    };
+
+    return JSON.stringify(exportData, null, 2);
+  },
+
+  importData: async (data: string): Promise<boolean> => {
+    try {
+      const importData = JSON.parse(data);
+      
+      if (!importData.version || !importData.categories) {
+        throw new Error('Invalid import data format');
+      }
+
+      const categories = deserialize.categories(importData.categories);
+      const categorySettings = importData.categorySettings 
+        ? deserialize.categorySettings(importData.categorySettings)
+        : {};
+
+      set((state) => ({
+        categories,
+        categorySettings,
+        persistenceError: null,
+      }));
+
+      // Save imported data
+      await get().saveToStorage();
+      
+      console.log('Successfully imported data');
+      return true;
+    } catch (error) {
+      console.error('Failed to import data:', error);
+      set((state) => ({
+        persistenceError: 'Failed to import data',
+      }));
+      return false;
+    }
+  },
+};
+```
+
+### Auto-save Integration:
+```typescript
+// Auto-save middleware for Zustand
+const createAutoSaveMiddleware = (store: any) => {
+  let saveTimeout: NodeJS.Timeout | null = null;
+  const SAVE_DELAY = 1000; // 1 second debounce
+
+  return (next: any) => (args: any) => {
+    const result = next(args);
+    
+    // Debounce save operations
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+    
+    saveTimeout = setTimeout(() => {
+      store.getState().saveToStorage();
+    }, SAVE_DELAY);
+
+    return result;
+  };
+};
+
+// Apply middleware to specific actions
+const withAutoSave = (actionName: string, action: Function) => {
+  return (...args: any[]) => {
+    const result = action(...args);
+    
+    // Trigger auto-save for category-related actions
+    if (actionName.includes('category') || actionName.includes('Category')) {
+      const state = get();
+      setTimeout(() => state.saveToStorage(), 100);
+    }
+    
+    return result;
+  };
+};
+```
+
+### Migration Support:
+```typescript
+// Handle storage version migrations
+const migrateStorageData = (key: string, storageData: StorageData): any => {
+  const { version, data } = storageData;
+  
+  try {
+    // Migration from version 0.x to 1.0.0
+    if (version.startsWith('0.')) {
+      console.log(`Migrating ${key} from version ${version} to ${CURRENT_STORAGE_VERSION}`);
+      
+      switch (key) {
+        case STORAGE_KEYS.CATEGORIES:
+          return migrateCategoriesV0ToV1(data);
+        case STORAGE_KEYS.CATEGORY_SETTINGS:
+          return migrateCategorySettingsV0ToV1(data);
+        default:
+          return null;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Migration failed for ${key}:`, error);
+    return null;
+  }
+};
+
+const migrateCategoriesV0ToV1 = (oldData: any[]): Category[] => {
+  return oldData.map((item) => ({
+    ...item,
+    // Add new fields with defaults
+    tags: item.tags || [],
+    videoCount: item.videoCount || 0,
+    sortOrder: item.sortOrder || 0,
+    isAiSuggested: false,
+    // Convert old date format if needed
+    createdAt: new Date(item.createdAt || item.created),
+    updatedAt: new Date(item.updatedAt || item.updated || item.createdAt || item.created),
+  }));
+};
+```
+
+## Files to Modify
+- `src/store/index.ts` - Add persistence layer to Zustand store
+
+## Dependencies
+- TASK_002_002 (Category CRUD operations must exist)
+- TASK_002_001 (Category state structure must exist)
+- TASK_001 (TypeScript interfaces must exist)
+
+## Implementation Notes
+- Use debounced auto-save to prevent excessive localStorage writes
+- Implement proper error boundaries for storage failures
+- Support data export/import for user data portability
+- Consider storage quota limits and implement cleanup
+- Prepare for future migration to database storage
+- Test with various browser storage configurations
+
+## Definition of Done
+- Categories and settings persist across browser sessions
+- Proper error handling for storage failures
+- Data migration support implemented
+- Export/import functionality working
+- Performance optimized with debounced saves
+- No data loss during normal operations 

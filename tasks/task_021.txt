@@ -1,0 +1,533 @@
+# TASK_021: Implement PWA features and offline functionality
+
+## Overview
+Transform the application into a Progressive Web App (PWA) with offline capabilities, service worker implementation, and app-like experience across devices.
+
+## Acceptance Criteria
+- [ ] Implement service worker for caching strategies
+- [ ] Add offline video metadata storage
+- [ ] Create app manifest for PWA installation
+- [ ] Implement offline-first data synchronization
+- [ ] Add background sync for pending actions
+- [ ] Create offline indicator and messaging
+- [ ] Implement app shell caching
+
+## Technical Requirements
+
+### Service Worker (`public/sw.js`):
+```javascript
+const CACHE_NAME = 'youtube-filter-v1';
+const API_CACHE_NAME = 'youtube-filter-api-v1';
+const STATIC_CACHE_NAME = 'youtube-filter-static-v1';
+
+// Files to cache for app shell
+const STATIC_FILES = [
+  '/',
+  '/offline',
+  '/_next/static/chunks/main.js',
+  '/_next/static/chunks/pages/_app.js',
+  '/_next/static/css/app.css',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
+  '/manifest.json'
+];
+
+// API endpoints to cache
+const API_ENDPOINTS = [
+  '/api/categories',
+  '/api/videos',
+  '/api/analytics/dashboard'
+];
+
+self.addEventListener('install', (event) => {
+  console.log('Service Worker: Installing...');
+  
+  event.waitUntil(
+    Promise.all([
+      // Cache app shell
+      caches.open(STATIC_CACHE_NAME).then((cache) => {
+        return cache.addAll(STATIC_FILES);
+      }),
+      
+      // Skip waiting to activate immediately
+      self.skipWaiting()
+    ])
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  console.log('Service Worker: Activating...');
+  
+  event.waitUntil(
+    Promise.all([
+      // Clean up old caches
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME && 
+                cacheName !== API_CACHE_NAME && 
+                cacheName !== STATIC_CACHE_NAME) {
+              console.log('Service Worker: Deleting old cache:', cacheName);
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      }),
+      
+      // Claim clients immediately
+      self.clients.claim()
+    ])
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Handle API requests
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(handleApiRequest(request));
+    return;
+  }
+
+  // Handle static files
+  if (request.method === 'GET') {
+    event.respondWith(handleStaticRequest(request));
+    return;
+  }
+});
+
+// Handle API requests with network-first strategy
+async function handleApiRequest(request) {
+  const cache = await caches.open(API_CACHE_NAME);
+  
+  try {
+    // Try network first
+    const networkResponse = await fetch(request);
+    
+    if (networkResponse.ok) {
+      // Cache successful responses
+      cache.put(request, networkResponse.clone());
+      return networkResponse;
+    }
+    
+    // If network fails, try cache
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {
+      // Add offline indicator to response
+      const response = cachedResponse.clone();
+      response.headers.set('X-Served-From', 'cache');
+      return response;
+    }
+    
+    // Return offline response
+    return new Response(JSON.stringify({
+      error: 'Offline',
+      message: 'This content is not available offline'
+    }), {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+  } catch (error) {
+    // Network error, try cache
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+    
+    // Return offline response
+    return new Response(JSON.stringify({
+      error: 'Network Error',
+      message: 'Unable to fetch data'
+    }), {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// Handle static requests with cache-first strategy
+async function handleStaticRequest(request) {
+  const cache = await caches.open(STATIC_CACHE_NAME);
+  
+  // Try cache first
+  const cachedResponse = await cache.match(request);
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+  
+  try {
+    // Try network
+    const networkResponse = await fetch(request);
+    if (networkResponse.ok) {
+      cache.put(request, networkResponse.clone());
+      return networkResponse;
+    }
+  } catch (error) {
+    // Network error
+  }
+  
+  // Return offline page for navigation requests
+  if (request.mode === 'navigate') {
+    return cache.match('/offline');
+  }
+  
+  return new Response('Resource not available offline', {
+    status: 503,
+    statusText: 'Service Unavailable'
+  });
+}
+
+// Background sync for offline actions
+self.addEventListener('sync', (event) => {
+  console.log('Service Worker: Background sync triggered:', event.tag);
+  
+  if (event.tag === 'sync-offline-actions') {
+    event.waitUntil(syncOfflineActions());
+  }
+});
+
+async function syncOfflineActions() {
+  try {
+    // Get pending actions from IndexedDB
+    const pendingActions = await getPendingActions();
+    
+    for (const action of pendingActions) {
+      try {
+        await executeAction(action);
+        await removePendingAction(action.id);
+      } catch (error) {
+        console.error('Failed to sync action:', action, error);
+      }
+    }
+  } catch (error) {
+    console.error('Background sync failed:', error);
+  }
+}
+
+// Push notification handling
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  
+  const data = event.data.json();
+  
+  const options = {
+    body: data.body,
+    icon: data.icon || '/icons/icon-192x192.png',
+    badge: data.badge || '/icons/badge-72x72.png',
+    data: data.data,
+    actions: data.actions || []
+  };
+  
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+// Notification click handling
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  
+  if (event.action) {
+    // Handle action buttons
+    handleNotificationAction(event.action, event.notification.data);
+  } else {
+    // Handle notification click
+    event.waitUntil(
+      clients.openWindow(event.notification.data.url || '/')
+    );
+  }
+});
+```
+
+### Offline Storage Service (`lib/offline-storage.ts`):
+```typescript
+export interface OfflineAction {
+  id: string;
+  type: string;
+  payload: any;
+  timestamp: Date;
+  retryCount: number;
+}
+
+export class OfflineStorageService {
+  private static instance: OfflineStorageService;
+  private db: IDBDatabase | null = null;
+  private dbName = 'youtube-filter-offline';
+  private dbVersion = 1;
+
+  static getInstance(): OfflineStorageService {
+    if (!OfflineStorageService.instance) {
+      OfflineStorageService.instance = new OfflineStorageService();
+    }
+    return OfflineStorageService.instance;
+  }
+
+  async init(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.dbVersion);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
+
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+
+        // Videos store for offline viewing
+        if (!db.objectStoreNames.contains('videos')) {
+          const videosStore = db.createObjectStore('videos', { keyPath: 'youtube_id' });
+          videosStore.createIndex('category', 'categories', { multiEntry: true });
+          videosStore.createIndex('cached_at', 'cached_at');
+        }
+
+        // Categories store
+        if (!db.objectStoreNames.contains('categories')) {
+          const categoriesStore = db.createObjectStore('categories', { keyPath: 'id' });
+          categoriesStore.createIndex('name', 'name');
+        }
+
+        // Pending actions store for background sync
+        if (!db.objectStoreNames.contains('pending-actions')) {
+          const actionsStore = db.createObjectStore('pending-actions', { keyPath: 'id' });
+          actionsStore.createIndex('timestamp', 'timestamp');
+        }
+
+        // User preferences store
+        if (!db.objectStoreNames.contains('preferences')) {
+          db.createObjectStore('preferences', { keyPath: 'key' });
+        }
+      };
+    });
+  }
+
+  // Video operations
+  async cacheVideo(video: any): Promise<void> {
+    if (!this.db) await this.init();
+
+    const videoData = {
+      ...video,
+      cached_at: new Date().toISOString(),
+      offline_available: true
+    };
+
+    return this.performOperation('videos', 'put', videoData);
+  }
+
+  async getCachedVideo(youtubeId: string): Promise<any | null> {
+    if (!this.db) await this.init();
+    return this.performOperation('videos', 'get', youtubeId);
+  }
+
+  async getCachedVideos(): Promise<any[]> {
+    if (!this.db) await this.init();
+    return this.performOperation('videos', 'getAll');
+  }
+
+  // Category operations
+  async cacheCategory(category: any): Promise<void> {
+    if (!this.db) await this.init();
+    return this.performOperation('categories', 'put', category);
+  }
+
+  async getCachedCategories(): Promise<any[]> {
+    if (!this.db) await this.init();
+    return this.performOperation('categories', 'getAll');
+  }
+
+  // Pending actions for background sync
+  async addPendingAction(action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>): Promise<void> {
+    if (!this.db) await this.init();
+
+    const pendingAction: OfflineAction = {
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+      retryCount: 0,
+      ...action
+    };
+
+    await this.performOperation('pending-actions', 'put', pendingAction);
+
+    // Register background sync
+    if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.sync.register('sync-offline-actions');
+    }
+  }
+
+  async getPendingActions(): Promise<OfflineAction[]> {
+    if (!this.db) await this.init();
+    return this.performOperation('pending-actions', 'getAll');
+  }
+
+  async removePendingAction(id: string): Promise<void> {
+    if (!this.db) await this.init();
+    return this.performOperation('pending-actions', 'delete', id);
+  }
+
+  // User preferences
+  async setPreference(key: string, value: any): Promise<void> {
+    if (!this.db) await this.init();
+    return this.performOperation('preferences', 'put', { key, value });
+  }
+
+  async getPreference(key: string): Promise<any> {
+    if (!this.db) await this.init();
+    const result = await this.performOperation('preferences', 'get', key);
+    return result?.value;
+  }
+
+  // Generic database operation
+  private async performOperation(storeName: string, operation: string, data?: any): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([storeName], 
+        operation === 'get' || operation === 'getAll' ? 'readonly' : 'readwrite'
+      );
+      const store = transaction.objectStore(storeName);
+      
+      let request: IDBRequest;
+      
+      switch (operation) {
+        case 'get':
+          request = store.get(data);
+          break;
+        case 'getAll':
+          request = store.getAll();
+          break;
+        case 'put':
+          request = store.put(data);
+          break;
+        case 'delete':
+          request = store.delete(data);
+          break;
+        default:
+          reject(new Error(`Unknown operation: ${operation}`));
+          return;
+      }
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+}
+```
+
+### PWA Hook (`src/hooks/usePWA.ts`):
+```typescript
+import { useState, useEffect } from 'react';
+
+export interface PWAInstallPrompt {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+export const usePWA = () => {
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [installPrompt, setInstallPrompt] = useState<PWAInstallPrompt | null>(null);
+
+  useEffect(() => {
+    // Check if app is already installed
+    setIsInstalled(window.matchMedia('(display-mode: standalone)').matches);
+
+    // Check online status
+    setIsOnline(navigator.onLine);
+
+    // Listen for install prompt
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as any);
+      setIsInstallable(true);
+    };
+
+    // Listen for online/offline events
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    // Listen for app installed event
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setIsInstallable(false);
+      setInstallPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const installApp = async (): Promise<boolean> => {
+    if (!installPrompt) return false;
+
+    try {
+      await installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      
+      if (outcome === 'accepted') {
+        setIsInstalled(true);
+        setIsInstallable(false);
+        setInstallPrompt(null);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error installing PWA:', error);
+    }
+
+    return false;
+  };
+
+  return {
+    isInstallable,
+    isInstalled,
+    isOnline,
+    installApp
+  };
+};
+```
+
+## Files to Create
+- `public/sw.js` - Service worker for caching and offline functionality
+- `public/manifest.json` - PWA manifest file
+- `lib/offline-storage.ts` - IndexedDB wrapper for offline data
+- `src/hooks/usePWA.ts` - PWA utilities hook
+- `src/components/OfflineIndicator.tsx` - Offline status indicator
+- `pages/offline.tsx` - Offline fallback page
+
+## Dependencies
+- No specific task dependencies (can be implemented independently)
+
+## Performance Requirements
+- **Cache Hit Rate**: 90%+ for static resources
+- **Offline Load Time**: Sub-2 second for cached content
+- **Storage Efficiency**: Intelligent cache size management
+- **Sync Performance**: Background sync within 30 seconds when online
+
+## Implementation Notes
+- Use appropriate caching strategies for different resource types
+- Implement intelligent cache invalidation
+- Provide clear offline/online status indicators
+- Ensure graceful degradation when offline
+- Optimize for mobile and desktop installations
+
+## Definition of Done
+- Service worker installed and functional
+- App installable on supported devices
+- Offline functionality working for key features
+- Background sync operational
+- Push notifications functional
+- App manifest properly configured
+- Offline indicator showing current status 

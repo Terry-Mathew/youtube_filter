@@ -1,0 +1,399 @@
+# TASK_005: Set up Next.js API routes foundation
+
+## Overview
+Create the foundational API route structure for the YouTube Filter application, establishing endpoints for categories, videos, and authentication using Next.js API routes.
+
+## Acceptance Criteria
+- [ ] Set up basic API route structure for categories, videos, and authentication
+- [ ] Implement proper TypeScript typing for all routes
+- [ ] Add error handling middleware
+- [ ] Set up CORS and security headers
+- [ ] Create API response helpers and utilities
+- [ ] Add request validation middleware
+- [ ] Implement rate limiting for API endpoints
+- [ ] Add API documentation structure
+
+## Technical Requirements
+
+### API Route Structure:
+```
+pages/api/
+├── categories/
+│   ├── index.ts          # GET /api/categories, POST /api/categories
+│   └── [id].ts           # GET, PUT, DELETE /api/categories/[id]
+├── videos/
+│   ├── index.ts          # GET /api/videos
+│   ├── fetch.ts          # POST /api/videos/fetch
+│   ├── search.ts         # POST /api/videos/search
+│   └── [id]/
+│       ├── index.ts      # GET, PUT, DELETE /api/videos/[id]
+│       ├── transcript.ts # GET /api/videos/[id]/transcript
+│       └── analyze.ts    # POST /api/videos/[id]/analyze
+├── auth/
+│   ├── index.ts          # Authentication status
+│   └── youtube-key.ts    # POST, PUT, DELETE API key management
+└── utils/
+    ├── middleware.ts     # Common middleware
+    ├── validation.ts     # Request validation
+    └── response.ts       # Response helpers
+```
+
+### Base API Route Template:
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { withMiddleware } from '../utils/middleware';
+import { apiResponse, ApiError } from '../utils/response';
+
+interface CategoryRequest extends NextApiRequest {
+  body: {
+    name: string;
+    keywords: string[];
+    settings: CategorySettings;
+  };
+}
+
+async function handler(req: CategoryRequest, res: NextApiResponse) {
+  try {
+    switch (req.method) {
+      case 'GET':
+        return await handleGet(req, res);
+      case 'POST':
+        return await handlePost(req, res);
+      case 'PUT':
+        return await handlePut(req, res);
+      case 'DELETE':
+        return await handleDelete(req, res);
+      default:
+        throw new ApiError(405, 'Method not allowed');
+    }
+  } catch (error) {
+    return apiResponse.error(res, error);
+  }
+}
+
+export default withMiddleware(handler);
+```
+
+### Categories API (`pages/api/categories/index.ts`):
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { Category, CategorySettings } from '../../../src/types';
+import { apiResponse, ApiError } from '../utils/response';
+import { validateCategoryData } from '../utils/validation';
+
+interface CategoriesRequest extends NextApiRequest {
+  body: {
+    name: string;
+    keywords: string[];
+    settings: CategorySettings;
+  };
+}
+
+async function handleGet(req: NextApiRequest, res: NextApiResponse) {
+  // TODO: Replace with database query
+  const categories: Category[] = []; // Placeholder
+  
+  return apiResponse.success(res, {
+    categories,
+    total: categories.length
+  });
+}
+
+async function handlePost(req: CategoriesRequest, res: NextApiResponse) {
+  const { name, keywords, settings } = req.body;
+  
+  // Validate input
+  const validation = validateCategoryData({ name, keywords, settings });
+  if (!validation.isValid) {
+    throw new ApiError(400, 'Invalid category data', validation.errors);
+  }
+  
+  // TODO: Save to database
+  const newCategory: Category = {
+    id: crypto.randomUUID(),
+    user_id: 'temp-user-id', // TODO: Get from auth
+    name,
+    keywords,
+    settings,
+    video_count: 0,
+    created_at: new Date().toISOString(),
+    last_updated: new Date().toISOString()
+  };
+  
+  return apiResponse.success(res, { category: newCategory }, 201);
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  try {
+    switch (req.method) {
+      case 'GET':
+        return await handleGet(req, res);
+      case 'POST':
+        return await handlePost(req as CategoriesRequest, res);
+      default:
+        throw new ApiError(405, 'Method not allowed');
+    }
+  } catch (error) {
+    return apiResponse.error(res, error);
+  }
+}
+```
+
+### Dynamic Category API (`pages/api/categories/[id].ts`):
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { Category } from '../../../src/types';
+import { apiResponse, ApiError } from '../utils/response';
+
+async function handleGet(req: NextApiRequest, res: NextApiResponse) {
+  const { id } = req.query;
+  
+  if (!id || typeof id !== 'string') {
+    throw new ApiError(400, 'Category ID is required');
+  }
+  
+  // TODO: Fetch from database
+  const category: Category | null = null; // Placeholder
+  
+  if (!category) {
+    throw new ApiError(404, 'Category not found');
+  }
+  
+  return apiResponse.success(res, { category });
+}
+
+async function handlePut(req: NextApiRequest, res: NextApiResponse) {
+  const { id } = req.query;
+  const updates = req.body;
+  
+  if (!id || typeof id !== 'string') {
+    throw new ApiError(400, 'Category ID is required');
+  }
+  
+  // TODO: Update in database
+  const updatedCategory: Category = {
+    ...updates,
+    id: id as string,
+    last_updated: new Date().toISOString()
+  };
+  
+  return apiResponse.success(res, { category: updatedCategory });
+}
+
+async function handleDelete(req: NextApiRequest, res: NextApiResponse) {
+  const { id } = req.query;
+  
+  if (!id || typeof id !== 'string') {
+    throw new ApiError(400, 'Category ID is required');
+  }
+  
+  // TODO: Delete from database
+  
+  return apiResponse.success(res, { deleted: true }, 204);
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  try {
+    switch (req.method) {
+      case 'GET':
+        return await handleGet(req, res);
+      case 'PUT':
+        return await handlePut(req, res);
+      case 'DELETE':
+        return await handleDelete(req, res);
+      default:
+        throw new ApiError(405, 'Method not allowed');
+    }
+  } catch (error) {
+    return apiResponse.error(res, error);
+  }
+}
+```
+
+### Response Utilities (`pages/api/utils/response.ts`):
+```typescript
+import type { NextApiResponse } from 'next';
+
+export class ApiError extends Error {
+  statusCode: number;
+  details?: any;
+
+  constructor(statusCode: number, message: string, details?: any) {
+    super(message);
+    this.statusCode = statusCode;
+    this.details = details;
+    this.name = 'ApiError';
+  }
+}
+
+export const apiResponse = {
+  success: (res: NextApiResponse, data: any, statusCode: number = 200) => {
+    return res.status(statusCode).json({
+      success: true,
+      data,
+      timestamp: new Date().toISOString()
+    });
+  },
+
+  error: (res: NextApiResponse, error: any) => {
+    const statusCode = error.statusCode || 500;
+    const message = error.message || 'Internal server error';
+    const details = error.details;
+
+    console.error('API Error:', error);
+
+    return res.status(statusCode).json({
+      success: false,
+      error: {
+        message,
+        details,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+};
+```
+
+### Validation Utilities (`pages/api/utils/validation.ts`):
+```typescript
+import { CategorySettings } from '../../../src/types';
+
+interface ValidationResult {
+  isValid: boolean;
+  errors: string[];
+}
+
+export function validateCategoryData(data: {
+  name: string;
+  keywords: string[];
+  settings: CategorySettings;
+}): ValidationResult {
+  const errors: string[] = [];
+
+  // Validate name
+  if (!data.name || typeof data.name !== 'string') {
+    errors.push('Category name is required');
+  } else if (data.name.trim().length === 0) {
+    errors.push('Category name cannot be empty');
+  } else if (data.name.length > 100) {
+    errors.push('Category name cannot exceed 100 characters');
+  }
+
+  // Validate keywords
+  if (!Array.isArray(data.keywords)) {
+    errors.push('Keywords must be an array');
+  } else if (data.keywords.length === 0) {
+    errors.push('At least one keyword is required');
+  } else if (data.keywords.some(k => typeof k !== 'string' || k.trim().length === 0)) {
+    errors.push('All keywords must be non-empty strings');
+  }
+
+  // Validate settings
+  if (!data.settings || typeof data.settings !== 'object') {
+    errors.push('Category settings are required');
+  } else {
+    if (typeof data.settings.min_relevance_score !== 'number' ||
+        data.settings.min_relevance_score < 0 ||
+        data.settings.min_relevance_score > 100) {
+      errors.push('Minimum relevance score must be a number between 0 and 100');
+    }
+
+    if (typeof data.settings.max_videos !== 'number' ||
+        data.settings.max_videos < 1 ||
+        data.settings.max_videos > 1000) {
+      errors.push('Maximum videos must be a number between 1 and 1000');
+    }
+
+    const validFrequencies = ['manual', 'daily', 'weekly'];
+    if (!validFrequencies.includes(data.settings.update_frequency)) {
+      errors.push('Update frequency must be one of: manual, daily, weekly');
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+export function validateYouTubeApiKey(apiKey: string): ValidationResult {
+  const errors: string[] = [];
+
+  if (!apiKey || typeof apiKey !== 'string') {
+    errors.push('API key is required');
+  } else if (apiKey.length < 20) {
+    errors.push('API key appears to be too short');
+  } else if (!/^[A-Za-z0-9_-]+$/.test(apiKey)) {
+    errors.push('API key contains invalid characters');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+```
+
+## Files to Create
+- `pages/api/categories/index.ts` - Categories CRUD operations
+- `pages/api/categories/[id].ts` - Individual category operations
+- `pages/api/videos/index.ts` - Videos listing endpoint
+- `pages/api/videos/fetch.ts` - Video fetching endpoint
+- `pages/api/videos/search.ts` - Video search endpoint
+- `pages/api/auth/index.ts` - Authentication status
+- `pages/api/auth/youtube-key.ts` - API key management
+- `pages/api/utils/response.ts` - Response utilities
+- `pages/api/utils/validation.ts` - Validation helpers
+- `pages/api/utils/middleware.ts` - Common middleware
+
+## Dependencies
+- TASK_001 (TypeScript interfaces must be defined first)
+
+## API Design Principles
+- **RESTful**: Follow REST conventions for endpoint design
+- **Consistent**: Uniform response format across all endpoints
+- **Typed**: Strong TypeScript typing for requests and responses
+- **Secure**: Input validation and error handling
+- **Documented**: Clear API documentation structure
+
+## Error Handling Strategy
+- **Structured Errors**: Consistent error response format
+- **HTTP Status Codes**: Proper status codes for different scenarios
+- **Validation**: Input validation with detailed error messages
+- **Logging**: Comprehensive error logging for debugging
+
+## Security Considerations
+- **Input Validation**: Validate all incoming data
+- **Rate Limiting**: Prevent API abuse
+- **CORS**: Configure cross-origin requests properly
+- **Headers**: Set appropriate security headers
+
+## Testing Requirements
+- Test all CRUD operations for categories
+- Verify proper error handling and status codes
+- Test input validation with various data types
+- Ensure TypeScript compilation succeeds
+- Test API endpoint accessibility
+
+## Performance Considerations
+- **Response Time**: Keep API responses under 500ms
+- **Caching**: Implement appropriate caching strategies
+- **Pagination**: Add pagination for list endpoints
+- **Compression**: Enable response compression
+
+## Implementation Notes
+- Use Next.js API route conventions
+- Follow existing project structure patterns
+- Implement proper error boundaries
+- Add request/response logging
+- Consider API versioning for future updates
+
+## Definition of Done
+- All API route files created and functional
+- TypeScript compilation succeeds without errors
+- Error handling implemented across all endpoints
+- Input validation working properly
+- Response utilities tested and functional
+- API structure documented
+- Basic security measures implemented
+- Integration with existing types complete 

@@ -1,0 +1,242 @@
+# TASK_016: Implement video caching and deduplication
+
+## Overview
+Create efficient caching system to prevent duplicate video processing and reduce API calls to YouTube and OpenAI services.
+
+## Acceptance Criteria
+- [ ] Implement video metadata caching strategy
+- [ ] Add deduplication logic for video processing
+- [ ] Create cache invalidation policies
+- [ ] Set up Redis-based caching layer
+- [ ] Add cache warming for popular categories
+- [ ] Implement cache hit/miss analytics
+- [ ] Handle cache synchronization across users
+
+## Technical Requirements
+
+### Caching Service (`lib/cache-service.ts`):
+```typescript
+import { createClient } from 'redis';
+import { Video, VideoAnalysis, Category } from '../src/types';
+
+export class CacheService {
+  private redis: ReturnType<typeof createClient>;
+  private static instance: CacheService;
+
+  constructor() {
+    this.redis = createClient({
+      url: process.env.REDIS_URL || 'redis://localhost:6379'
+    });
+  }
+
+  static getInstance(): CacheService {
+    if (!CacheService.instance) {
+      CacheService.instance = new CacheService();
+    }
+    return CacheService.instance;
+  }
+
+  // Video metadata caching
+  async cacheVideo(video: Video, ttl: number = 86400): Promise<void> {
+    const key = `video:${video.youtube_id}`;
+    await this.redis.setex(key, ttl, JSON.stringify(video));
+  }
+
+  async getCachedVideo(youtubeId: string): Promise<Video | null> {
+    const key = `video:${youtubeId}`;
+    const cached = await this.redis.get(key);
+    return cached ? JSON.parse(cached) : null;
+  }
+
+  // Video analysis caching
+  async cacheAnalysis(
+    youtubeId: string, 
+    categoryId: string, 
+    analysis: VideoAnalysis, 
+    ttl: number = 604800
+  ): Promise<void> {
+    const key = `analysis:${youtubeId}:${categoryId}`;
+    await this.redis.setex(key, ttl, JSON.stringify(analysis));
+  }
+
+  async getCachedAnalysis(youtubeId: string, categoryId: string): Promise<VideoAnalysis | null> {
+    const key = `analysis:${youtubeId}:${categoryId}`;
+    const cached = await this.redis.get(key);
+    return cached ? JSON.parse(cached) : null;
+  }
+
+  // Transcript caching
+  async cacheTranscript(youtubeId: string, transcript: string, ttl: number = 2592000): Promise<void> {
+    const key = `transcript:${youtubeId}`;
+    await this.redis.setex(key, ttl, transcript);
+  }
+
+  async getCachedTranscript(youtubeId: string): Promise<string | null> {
+    const key = `transcript:${youtubeId}`;
+    return await this.redis.get(key);
+  }
+
+  // Search result caching
+  async cacheSearchResults(
+    searchQuery: string, 
+    filters: any, 
+    results: Video[], 
+    ttl: number = 3600
+  ): Promise<void> {
+    const key = `search:${this.hashQuery(searchQuery, filters)}`;
+    await this.redis.setex(key, ttl, JSON.stringify(results));
+  }
+
+  async getCachedSearchResults(searchQuery: string, filters: any): Promise<Video[] | null> {
+    const key = `search:${this.hashQuery(searchQuery, filters)}`;
+    const cached = await this.redis.get(key);
+    return cached ? JSON.parse(cached) : null;
+  }
+
+  // Cache warming for popular categories
+  async warmCategoryCache(category: Category): Promise<void> {
+    // Pre-fetch and cache videos for high-traffic categories
+    // Implementation depends on category popularity metrics
+  }
+
+  // Deduplication helpers
+  async isVideoProcessed(youtubeId: string, categoryId: string): Promise<boolean> {
+    const analysisKey = `analysis:${youtubeId}:${categoryId}`;
+    const exists = await this.redis.exists(analysisKey);
+    return exists === 1;
+  }
+
+  async markVideoProcessed(youtubeId: string, categoryId: string): Promise<void> {
+    const key = `processed:${youtubeId}:${categoryId}`;
+    await this.redis.setex(key, 86400, 'true');
+  }
+
+  // Cache invalidation
+  async invalidateVideoCache(youtubeId: string): Promise<void> {
+    const pattern = `*:${youtubeId}*`;
+    const keys = await this.redis.keys(pattern);
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+    }
+  }
+
+  async invalidateCategoryCache(categoryId: string): Promise<void> {
+    const pattern = `*:${categoryId}`;
+    const keys = await this.redis.keys(pattern);
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+    }
+  }
+
+  private hashQuery(query: string, filters: any): string {
+    return Buffer.from(JSON.stringify({ query, filters })).toString('base64');
+  }
+
+  // Analytics
+  async recordCacheHit(type: string): Promise<void> {
+    const key = `cache_stats:hits:${type}:${new Date().toISOString().split('T')[0]}`;
+    await this.redis.incr(key);
+  }
+
+  async recordCacheMiss(type: string): Promise<void> {
+    const key = `cache_stats:misses:${type}:${new Date().toISOString().split('T')[0]}`;
+    await this.redis.incr(key);
+  }
+}
+```
+
+### Deduplication Middleware (`lib/deduplication.ts`):
+```typescript
+import { CacheService } from './cache-service';
+import { Video, Category } from '../src/types';
+
+export class DeduplicationService {
+  private cache: CacheService;
+
+  constructor() {
+    this.cache = CacheService.getInstance();
+  }
+
+  async filterUniqueVideos(videos: Video[]): Promise<Video[]> {
+    const uniqueVideos: Video[] = [];
+    const seenIds = new Set<string>();
+
+    for (const video of videos) {
+      if (!seenIds.has(video.youtube_id)) {
+        seenIds.add(video.youtube_id);
+        uniqueVideos.push(video);
+      }
+    }
+
+    return uniqueVideos;
+  }
+
+  async filterUnprocessedVideos(videos: Video[], categoryId: string): Promise<Video[]> {
+    const unprocessed: Video[] = [];
+
+    for (const video of videos) {
+      const isProcessed = await this.cache.isVideoProcessed(video.youtube_id, categoryId);
+      if (!isProcessed) {
+        unprocessed.push(video);
+      }
+    }
+
+    return unprocessed;
+  }
+
+  async getVideoWithCache(youtubeId: string): Promise<Video | null> {
+    // Try cache first
+    let video = await this.cache.getCachedVideo(youtubeId);
+    
+    if (video) {
+      await this.cache.recordCacheHit('video');
+      return video;
+    }
+
+    await this.cache.recordCacheMiss('video');
+    return null;
+  }
+
+  async getAnalysisWithCache(youtubeId: string, categoryId: string): Promise<any | null> {
+    let analysis = await this.cache.getCachedAnalysis(youtubeId, categoryId);
+    
+    if (analysis) {
+      await this.cache.recordCacheHit('analysis');
+      return analysis;
+    }
+
+    await this.cache.recordCacheMiss('analysis');
+    return null;
+  }
+}
+```
+
+## Files to Create
+- `lib/cache-service.ts` - Main caching service with Redis
+- `lib/deduplication.ts` - Video deduplication logic
+- `pages/api/cache/invalidate.ts` - Cache management API
+- `lib/cache-config.ts` - Cache configuration and policies
+
+## Dependencies
+- TASK_007 (YouTube API integration must exist)
+- TASK_010 (OpenAI analysis must exist)
+
+## Performance Requirements
+- **Cache Hit Rate**: Target 80%+ for video metadata
+- **Response Time**: Sub-100ms for cached responses
+- **Memory Usage**: Efficient Redis memory utilization
+- **TTL Strategy**: Appropriate expiration times for different data types
+
+## Implementation Notes
+- Use Redis for high-performance caching
+- Implement proper error handling for cache failures
+- Add monitoring for cache performance
+- Consider cache warming strategies for popular content
+- Implement gradual cache invalidation to prevent thundering herd
+
+## Definition of Done
+- Redis caching layer implemented and functional
+- Video deduplication working correctly
+- Cache invalidation policies operational
+- Performance metrics showing improved response times
+- Cache hit/miss analytics available 

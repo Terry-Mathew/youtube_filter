@@ -1,0 +1,185 @@
+# TASK_003: Create CategoryManager UI component
+
+## Overview
+Build a comprehensive category management interface that allows users to create, edit, and delete categories using existing UI patterns and design system.
+
+## Acceptance Criteria
+- [ ] Create category creation modal/form
+- [ ] Implement category editing functionality
+- [ ] Add category deletion with confirmation
+- [ ] Display category list with usage statistics
+- [ ] Integrate with existing Settings page
+- [ ] Follow existing UI/UX patterns and styling
+- [ ] Support keyword management per category
+- [ ] Add category settings configuration
+
+## Technical Requirements
+
+### Component Structure:
+```typescript
+interface CategoryManagerProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+interface CategoryFormProps {
+  category?: Category;
+  onSave: (category: Omit<Category, 'id' | 'created_at' | 'last_updated'>) => void;
+  onCancel: () => void;
+}
+
+interface CategoryListItemProps {
+  category: Category;
+  onEdit: (category: Category) => void;
+  onDelete: (categoryId: string) => void;
+}
+```
+
+### Core Components:
+
+1. **CategoryManager** (Main component)
+2. **CategoryForm** (Create/Edit form)
+3. **CategoryListItem** (Individual category display)
+4. **KeywordInput** (Multi-keyword input component)
+5. **CategorySettings** (Settings per category)
+
+### UI Features:
+- Modal-based category creation/editing
+- Drag-and-drop keyword management
+- Category usage statistics (video count, last updated)
+- Bulk category operations
+- Search/filter within categories
+- Import/export category configurations
+
+### Example Implementation:
+```typescript
+const CategoryManager: React.FC<CategoryManagerProps> = ({ isOpen, onClose }) => {
+  const { categories, addCategory, updateCategory, deleteCategory } = useAppStore();
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  return (
+    <motion.div className="space-y-6">
+      {/* Header with create button */}
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-medium text-gray-900">Learning Categories</h3>
+        <button
+          onClick={() => setShowForm(true)}
+          className="btn-primary"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Category
+        </button>
+      </div>
+
+      {/* Category list */}
+      <div className="space-y-3">
+        {categories.map((category) => (
+          <CategoryListItem
+            key={category.id}
+            category={category}
+            onEdit={setEditingCategory}
+            onDelete={deleteCategory}
+          />
+        ))}
+      </div>
+
+      {/* Create/Edit form modal */}
+      {(showForm || editingCategory) && (
+        <CategoryForm
+          category={editingCategory}
+          onSave={(categoryData) => {
+            if (editingCategory) {
+              updateCategory(editingCategory.id, categoryData);
+            } else {
+              addCategory(categoryData);
+            }
+            setShowForm(false);
+            setEditingCategory(null);
+          }}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingCategory(null);
+          }}
+        />
+      )}
+    </motion.div>
+  );
+};
+```
+
+## Files to Modify
+- `src/components/CategoryManager.tsx` - Main component
+- `src/components/CategoryForm.tsx` - Create/edit form
+- `src/components/KeywordInput.tsx` - Keyword management
+- `src/pages/Settings.tsx` - Integrate CategoryManager
+
+## Dependencies
+- TASK_002 (Store must have category management first)
+
+## Integration with Existing Components
+- Use existing modal patterns from Settings page
+- Follow existing form styling and validation
+- Reuse button and input components
+- Match existing animation patterns with Framer Motion
+- Use existing color scheme and spacing
+
+## UI/UX Requirements
+- **Modal Design**: Follow existing modal patterns in Settings
+- **Form Validation**: Real-time validation for category names and keywords
+- **Responsive**: Mobile-friendly interface
+- **Accessibility**: Proper ARIA labels and keyboard navigation
+- **Loading States**: Show loading during operations
+- **Error Handling**: Display validation and server errors
+
+### Keyword Management:
+- Tag-based input for multiple keywords
+- Add/remove keywords dynamically
+- Keyword suggestions based on category name
+- Validation for minimum keyword requirements
+
+### Category Settings:
+- Minimum relevance score slider
+- Maximum videos per category
+- Update frequency selection
+- Content type preferences
+
+## Testing Requirements
+- Test category creation with valid/invalid data
+- Verify editing updates correctly
+- Test deletion with confirmation flow
+- Ensure form validation works properly
+- Test keyboard navigation and accessibility
+- Verify responsive design on mobile
+
+## Design Specifications
+- Use existing card layout for category list items
+- Implement consistent spacing with Tailwind classes
+- Add hover states and animations
+- Include progress indicators for video counts
+- Show last updated timestamps
+- Use existing icon set (Lucide React)
+
+## Implementation Notes
+- Use existing utility functions for date formatting
+- Implement optimistic updates for better UX
+- Add confirmation dialogs for destructive actions
+- Cache form state to prevent data loss
+- Implement auto-save for category settings
+
+## Edge Cases
+- Handle empty category list state
+- Manage duplicate category names
+- Handle network errors during operations
+- Validate keyword format and length
+- Limit maximum number of categories per user
+
+## Definition of Done
+- CategoryManager component fully functional
+- Integration with Settings page complete
+- All CRUD operations working through UI
+- Form validation and error handling implemented
+- Responsive design verified
+- Accessibility requirements met
+- Components follow existing design patterns
+- Unit tests written for core functionality 

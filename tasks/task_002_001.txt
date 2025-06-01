@@ -1,0 +1,94 @@
+# TASK_002_001: Setup category state structure in Zustand store
+
+## Overview
+Define the foundational category state structure in the existing Zustand store, integrating with the TypeScript interfaces from TASK_001 and preparing for category management functionality.
+
+## Acceptance Criteria
+- [ ] Category state interface properly typed with Category and CategorySettings
+- [ ] Initial empty state for categories correctly implemented
+- [ ] State structure follows Zustand best practices
+- [ ] TypeScript integration with branded types working
+- [ ] Store structure prepared for category CRUD operations
+
+## Technical Requirements
+
+### Core State Structure:
+```typescript
+interface CategoryState {
+  // Categories data
+  categories: Category[];
+  categorySettings: Record<CategoryId, CategorySettings>;
+  
+  // Selection and filtering state
+  selectedCategoryIds: CategoryId[];
+  activeCategoryId: CategoryId | null;
+  
+  // UI state
+  categoryFilters: {
+    searchQuery: string;
+    sortBy: 'name' | 'createdAt' | 'videoCount';
+    sortOrder: 'asc' | 'desc';
+    showInactive: boolean;
+  };
+  
+  // Loading states
+  categoriesLoading: boolean;
+  categoryOperationLoading: Record<CategoryId, boolean>;
+}
+```
+
+### Store Integration Pattern:
+```typescript
+// Extend existing store interface
+interface AppStore extends CategoryState {
+  // ... existing state properties
+  
+  // Category state
+  categories: Category[];
+  categorySettings: Record<CategoryId, CategorySettings>;
+  selectedCategoryIds: CategoryId[];
+  activeCategoryId: CategoryId | null;
+  categoryFilters: CategoryFilters;
+  categoriesLoading: boolean;
+  categoryOperationLoading: Record<CategoryId, boolean>;
+}
+```
+
+### Initial State Setup:
+```typescript
+const initialCategoryState: CategoryState = {
+  categories: [],
+  categorySettings: {},
+  selectedCategoryIds: [],
+  activeCategoryId: null,
+  categoryFilters: {
+    searchQuery: '',
+    sortBy: 'name',
+    sortOrder: 'asc',
+    showInactive: false,
+  },
+  categoriesLoading: false,
+  categoryOperationLoading: {},
+};
+```
+
+## Files to Modify
+- `src/store/index.ts` - Add category state structure to existing Zustand store
+
+## Dependencies
+- TASK_001 (TypeScript interfaces must exist)
+- Existing Zustand store structure
+
+## Implementation Notes
+- Integrate with existing store without breaking current functionality
+- Use branded CategoryId types for type safety
+- Follow existing naming conventions in the store
+- Prepare state structure for future CRUD operations
+- Consider performance implications of state updates
+
+## Definition of Done
+- Category state structure added to store with proper TypeScript typing
+- Initial state correctly initialized
+- No TypeScript errors or linting issues
+- Store structure ready for category operations
+- Existing store functionality unchanged 

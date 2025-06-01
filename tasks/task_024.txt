@@ -1,0 +1,1014 @@
+# TASK_024: Implement monitoring, logging, and observability
+
+## Overview
+Establish comprehensive monitoring, logging, and observability infrastructure to ensure production reliability, performance monitoring, and debugging capabilities.
+
+## Acceptance Criteria
+- [ ] Set up application performance monitoring (APM)
+- [ ] Implement structured logging and log aggregation
+- [ ] Configure error tracking and alerting
+- [ ] Add performance metrics and dashboards
+- [ ] Set up uptime monitoring
+- [ ] Implement user session tracking
+- [ ] Create monitoring dashboards and alerts
+
+## Technical Requirements
+
+### Logging Service (`lib/logger.ts`):
+```typescript
+import winston from 'winston';
+import { format } from 'winston';
+
+// Custom log levels
+const logLevels = {
+  error: 0,
+  warn: 1,
+  info: 2,
+  http: 3,
+  debug: 4,
+};
+
+const logColors = {
+  error: 'red',
+  warn: 'yellow',
+  info: 'green',
+  http: 'magenta',
+  debug: 'white',
+};
+
+winston.addColors(logColors);
+
+// Custom format for structured logging
+const logFormat = format.combine(
+  format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+  format.errors({ stack: true }),
+  format.colorize({ all: true }),
+  format.printf((info) => {
+    const { timestamp, level, message, ...args } = info;
+    const ts = timestamp.slice(0, 19).replace('T', ' ');
+    
+    return `${ts} [${level}]: ${message} ${
+      Object.keys(args).length ? JSON.stringify(args, null, 2) : ''
+    }`;
+  })
+);
+
+// Production format (JSON for log aggregation)
+const productionFormat = format.combine(
+  format.timestamp(),
+  format.errors({ stack: true }),
+  format.json(),
+  format.printf((info) => {
+    return JSON.stringify({
+      timestamp: info.timestamp,
+      level: info.level,
+      message: info.message,
+      stack: info.stack,
+      ...info
+    });
+  })
+);
+
+const transports = [
+  // Console transport
+  new winston.transports.Console({
+    format: process.env.NODE_ENV === 'production' ? productionFormat : logFormat,
+  }),
+];
+
+// Add file transports in production
+if (process.env.NODE_ENV === 'production') {
+  transports.push(
+    new winston.transports.File({
+      filename: 'logs/error.log',
+      level: 'error',
+      format: productionFormat,
+    }),
+    new winston.transports.File({
+      filename: 'logs/combined.log',
+      format: productionFormat,
+    })
+  );
+}
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  levels: logLevels,
+  format: productionFormat,
+  transports,
+  exceptionHandlers: [
+    new winston.transports.File({ filename: 'logs/exceptions.log' }),
+  ],
+  rejectionHandlers: [
+    new winston.transports.File({ filename: 'logs/rejections.log' }),
+  ],
+});
+
+// Enhanced logger with context
+export class AppLogger {
+  private static instance: AppLogger;
+  private winston: winston.Logger;
+  private context: Record<string, any> = {};
+
+  constructor() {
+    this.winston = logger;
+  }
+
+  static getInstance(): AppLogger {
+    if (!AppLogger.instance) {
+      AppLogger.instance = new AppLogger();
+    }
+    return AppLogger.instance;
+  }
+
+  setContext(context: Record<string, any>): void {
+    this.context = { ...this.context, ...context };
+  }
+
+  clearContext(): void {
+    this.context = {};
+  }
+
+  private log(level: string, message: string, meta?: any): void {
+    const logData = {
+      ...this.context,
+      ...meta,
+      timestamp: new Date().toISOString(),
+      pid: process.pid,
+      hostname: process.env.HOSTNAME || 'unknown',
+      environment: process.env.NODE_ENV || 'development',
+    };
+
+    this.winston.log(level, message, logData);
+  }
+
+  error(message: string, error?: Error | any, meta?: any): void {
+    const errorMeta = error instanceof Error 
+      ? { 
+          error: error.message, 
+          stack: error.stack,
+          name: error.name,
+        }
+      : { error };
+
+    this.log('error', message, { ...errorMeta, ...meta });
+  }
+
+  warn(message: string, meta?: any): void {
+    this.log('warn', message, meta);
+  }
+
+  info(message: string, meta?: any): void {
+    this.log('info', message, meta);
+  }
+
+  http(message: string, meta?: any): void {
+    this.log('http', message, meta);
+  }
+
+  debug(message: string, meta?: any): void {
+    this.log('debug', message, meta);
+  }
+
+  // Performance logging
+  timing(name: string, duration: number, meta?: any): void {
+    this.info(`Performance: ${name}`, {
+      performance: {
+        name,
+        duration,
+        unit: 'ms'
+      },
+      ...meta
+    });
+  }
+
+  // API request logging
+  apiRequest(req: any, res: any, duration: number): void {
+    this.http('API Request', {
+      request: {
+        method: req.method,
+        url: req.url,
+        userAgent: req.headers['user-agent'],
+        ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
+        referer: req.headers.referer,
+      },
+      response: {
+        statusCode: res.statusCode,
+        duration,
+      },
+    });
+  }
+
+  // User activity logging
+  userActivity(userId: string, action: string, meta?: any): void {
+    this.info('User Activity', {
+      user: {
+        id: userId,
+        action,
+      },
+      ...meta
+    });
+  }
+
+  // Business metrics logging
+  businessMetric(name: string, value: number, unit?: string, meta?: any): void {
+    this.info('Business Metric', {
+      metric: {
+        name,
+        value,
+        unit: unit || 'count',
+      },
+      ...meta
+    });
+  }
+}
+
+export const appLogger = AppLogger.getInstance();
+```
+
+### Performance Monitoring (`lib/performance-monitor.ts`):
+```typescript
+import { appLogger } from './logger';
+import { AnalyticsService } from './analytics-service';
+
+export class PerformanceMonitor {
+  private static instance: PerformanceMonitor;
+  private analytics: AnalyticsService;
+  private performanceObserver?: PerformanceObserver;
+
+  constructor() {
+    this.analytics = AnalyticsService.getInstance();
+    this.initializePerformanceObserver();
+  }
+
+  static getInstance(): PerformanceMonitor {
+    if (!PerformanceMonitor.instance) {
+      PerformanceMonitor.instance = new PerformanceMonitor();
+    }
+    return PerformanceMonitor.instance;
+  }
+
+  private initializePerformanceObserver(): void {
+    if (typeof window !== 'undefined' && 'PerformanceObserver' in window) {
+      this.performanceObserver = new PerformanceObserver((list) => {
+        const entries = list.getEntries();
+        entries.forEach((entry) => {
+          this.handlePerformanceEntry(entry);
+        });
+      });
+
+      // Observe different types of performance entries
+      try {
+        this.performanceObserver.observe({ entryTypes: ['navigation', 'resource', 'paint', 'layout-shift', 'largest-contentful-paint'] });
+      } catch (error) {
+        appLogger.warn('Performance Observer initialization failed', { error });
+      }
+    }
+  }
+
+  private handlePerformanceEntry(entry: PerformanceEntry): void {
+    switch (entry.entryType) {
+      case 'navigation':
+        this.handleNavigationTiming(entry as PerformanceNavigationTiming);
+        break;
+      case 'resource':
+        this.handleResourceTiming(entry as PerformanceResourceTiming);
+        break;
+      case 'paint':
+        this.handlePaintTiming(entry);
+        break;
+      case 'layout-shift':
+        this.handleLayoutShift(entry as any);
+        break;
+      case 'largest-contentful-paint':
+        this.handleLargestContentfulPaint(entry as any);
+        break;
+    }
+  }
+
+  private handleNavigationTiming(entry: PerformanceNavigationTiming): void {
+    const metrics = {
+      dns_lookup: entry.domainLookupEnd - entry.domainLookupStart,
+      tcp_connect: entry.connectEnd - entry.connectStart,
+      ssl_handshake: entry.connectEnd - entry.secureConnectionStart,
+      ttfb: entry.responseStart - entry.requestStart,
+      dom_content_loaded: entry.domContentLoadedEventEnd - entry.domContentLoadedEventStart,
+      load_complete: entry.loadEventEnd - entry.loadEventStart,
+      total_load_time: entry.loadEventEnd - entry.navigationStart,
+    };
+
+    appLogger.timing('Page Load', metrics.total_load_time, { navigation_metrics: metrics });
+
+    // Track critical performance metrics
+    this.analytics.trackEvent({
+      event_type: 'performance_navigation',
+      metadata: metrics,
+      timestamp: new Date()
+    });
+  }
+
+  private handleResourceTiming(entry: PerformanceResourceTiming): void {
+    const duration = entry.responseEnd - entry.startTime;
+    
+    // Only log slow resources (>1s)
+    if (duration > 1000) {
+      appLogger.timing(`Slow Resource: ${entry.name}`, duration, {
+        resource: {
+          name: entry.name,
+          type: entry.initiatorType,
+          size: entry.transferSize,
+          cached: entry.transferSize === 0,
+        }
+      });
+    }
+  }
+
+  private handlePaintTiming(entry: PerformanceEntry): void {
+    appLogger.timing(`Paint: ${entry.name}`, entry.startTime, {
+      paint_type: entry.name
+    });
+
+    if (entry.name === 'first-contentful-paint') {
+      this.analytics.trackEvent({
+        event_type: 'performance_fcp',
+        metadata: { duration: entry.startTime },
+        timestamp: new Date()
+      });
+    }
+  }
+
+  private handleLayoutShift(entry: any): void {
+    if (entry.hadRecentInput) return; // Ignore layout shifts caused by user input
+
+    appLogger.info('Layout Shift Detected', {
+      performance: {
+        cls_value: entry.value,
+        sources: entry.sources?.map((source: any) => ({
+          node: source.node?.tagName,
+          previous_rect: source.previousRect,
+          current_rect: source.currentRect,
+        }))
+      }
+    });
+
+    this.analytics.trackEvent({
+      event_type: 'performance_cls',
+      metadata: { value: entry.value },
+      timestamp: new Date()
+    });
+  }
+
+  private handleLargestContentfulPaint(entry: any): void {
+    appLogger.timing('Largest Contentful Paint', entry.startTime, {
+      element: entry.element?.tagName,
+      url: entry.url,
+      size: entry.size
+    });
+
+    this.analytics.trackEvent({
+      event_type: 'performance_lcp',
+      metadata: { duration: entry.startTime },
+      timestamp: new Date()
+    });
+  }
+
+  // Manual performance tracking
+  startTimer(name: string): () => void {
+    const start = performance.now();
+    
+    return () => {
+      const duration = performance.now() - start;
+      appLogger.timing(name, duration);
+      
+      return duration;
+    };
+  }
+
+  // API response time tracking
+  trackApiCall(endpoint: string, method: string, duration: number, statusCode: number): void {
+    appLogger.timing(`API Call: ${method} ${endpoint}`, duration, {
+      api: {
+        endpoint,
+        method,
+        status_code: statusCode,
+        success: statusCode >= 200 && statusCode < 300,
+      }
+    });
+
+    this.analytics.trackEvent({
+      event_type: 'api_performance',
+      metadata: {
+        endpoint,
+        method,
+        duration,
+        status_code: statusCode,
+      },
+      timestamp: new Date()
+    });
+  }
+
+  // Memory usage tracking
+  trackMemoryUsage(): void {
+    if (typeof window !== 'undefined' && 'performance' in window && 'memory' in performance) {
+      const memory = (performance as any).memory;
+      
+      appLogger.info('Memory Usage', {
+        memory: {
+          used: memory.usedJSHeapSize,
+          total: memory.totalJSHeapSize,
+          limit: memory.jsHeapSizeLimit,
+          usage_percentage: Math.round((memory.usedJSHeapSize / memory.totalJSHeapSize) * 100)
+        }
+      });
+    }
+  }
+
+  // Core Web Vitals collection
+  collectWebVitals(): void {
+    // This would integrate with web-vitals library
+    import('web-vitals').then(({ getCLS, getFID, getFCP, getLCP, getTTFB }) => {
+      getCLS((metric) => {
+        appLogger.info('Core Web Vital: CLS', { metric });
+        this.analytics.trackEvent({
+          event_type: 'web_vital_cls',
+          metadata: metric,
+          timestamp: new Date()
+        });
+      });
+
+      getFID((metric) => {
+        appLogger.info('Core Web Vital: FID', { metric });
+        this.analytics.trackEvent({
+          event_type: 'web_vital_fid',
+          metadata: metric,
+          timestamp: new Date()
+        });
+      });
+
+      getFCP((metric) => {
+        appLogger.info('Core Web Vital: FCP', { metric });
+        this.analytics.trackEvent({
+          event_type: 'web_vital_fcp',
+          metadata: metric,
+          timestamp: new Date()
+        });
+      });
+
+      getLCP((metric) => {
+        appLogger.info('Core Web Vital: LCP', { metric });
+        this.analytics.trackEvent({
+          event_type: 'web_vital_lcp',
+          metadata: metric,
+          timestamp: new Date()
+        });
+      });
+
+      getTTFB((metric) => {
+        appLogger.info('Core Web Vital: TTFB', { metric });
+        this.analytics.trackEvent({
+          event_type: 'web_vital_ttfb',
+          metadata: metric,
+          timestamp: new Date()
+        });
+      });
+    }).catch((error) => {
+      appLogger.error('Failed to load web-vitals library', error);
+    });
+  }
+}
+
+export const performanceMonitor = PerformanceMonitor.getInstance();
+```
+
+### Error Tracking Service (`lib/error-tracker.ts`):
+```typescript
+import { appLogger } from './logger';
+import { AnalyticsService } from './analytics-service';
+
+export interface ErrorContext {
+  user_id?: string;
+  session_id?: string;
+  url?: string;
+  user_agent?: string;
+  component?: string;
+  action?: string;
+  additional_data?: Record<string, any>;
+}
+
+export class ErrorTracker {
+  private static instance: ErrorTracker;
+  private analytics: AnalyticsService;
+  private isInitialized = false;
+
+  constructor() {
+    this.analytics = AnalyticsService.getInstance();
+  }
+
+  static getInstance(): ErrorTracker {
+    if (!ErrorTracker.instance) {
+      ErrorTracker.instance = new ErrorTracker();
+    }
+    return ErrorTracker.instance;
+  }
+
+  initialize(): void {
+    if (this.isInitialized) return;
+
+    // Global error handlers
+    if (typeof window !== 'undefined') {
+      // Unhandled JavaScript errors
+      window.addEventListener('error', (event) => {
+        this.captureError(event.error, {
+          url: window.location.href,
+          user_agent: navigator.userAgent,
+          additional_data: {
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+            message: event.message,
+          }
+        });
+      });
+
+      // Unhandled promise rejections
+      window.addEventListener('unhandledrejection', (event) => {
+        this.captureError(new Error(`Unhandled Promise Rejection: ${event.reason}`), {
+          url: window.location.href,
+          user_agent: navigator.userAgent,
+          additional_data: {
+            reason: event.reason,
+            type: 'unhandled_promise_rejection',
+          }
+        });
+      });
+
+      // React Error Boundary integration
+      this.setupReactErrorBoundary();
+    }
+
+    // Node.js error handlers
+    if (typeof process !== 'undefined') {
+      process.on('uncaughtException', (error) => {
+        this.captureError(error, {
+          additional_data: {
+            type: 'uncaught_exception',
+            pid: process.pid,
+          }
+        });
+      });
+
+      process.on('unhandledRejection', (reason, promise) => {
+        this.captureError(new Error(`Unhandled Rejection: ${reason}`), {
+          additional_data: {
+            type: 'unhandled_rejection',
+            promise: promise.toString(),
+            pid: process.pid,
+          }
+        });
+      });
+    }
+
+    this.isInitialized = true;
+    appLogger.info('Error Tracker initialized');
+  }
+
+  captureError(error: Error, context: ErrorContext = {}): void {
+    const errorId = this.generateErrorId();
+    
+    const errorData = {
+      id: errorId,
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      timestamp: new Date().toISOString(),
+      context: {
+        ...context,
+        environment: process.env.NODE_ENV,
+        version: process.env.APP_VERSION,
+      }
+    };
+
+    // Log the error
+    appLogger.error('Error Captured', error, {
+      error_id: errorId,
+      context: errorData.context
+    });
+
+    // Track in analytics
+    this.analytics.trackEvent({
+      event_type: 'error_captured',
+      user_id: context.user_id,
+      metadata: {
+        error_id: errorId,
+        error_type: error.name,
+        error_message: error.message,
+        component: context.component,
+        action: context.action,
+      },
+      timestamp: new Date()
+    });
+
+    // Send to external error tracking service (Sentry, etc.)
+    this.sendToExternalService(errorData);
+
+    // Alert for critical errors
+    if (this.isCriticalError(error)) {
+      this.sendCriticalErrorAlert(errorData);
+    }
+  }
+
+  captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info', context: ErrorContext = {}): void {
+    const messageData = {
+      id: this.generateErrorId(),
+      message,
+      level,
+      timestamp: new Date().toISOString(),
+      context: {
+        ...context,
+        environment: process.env.NODE_ENV,
+        version: process.env.APP_VERSION,
+      }
+    };
+
+    appLogger[level === 'warning' ? 'warn' : level]('Message Captured', {
+      message_id: messageData.id,
+      context: messageData.context
+    });
+
+    this.analytics.trackEvent({
+      event_type: 'message_captured',
+      user_id: context.user_id,
+      metadata: {
+        message_id: messageData.id,
+        level,
+        message,
+      },
+      timestamp: new Date()
+    });
+  }
+
+  // Performance issue tracking
+  capturePerformanceIssue(name: string, duration: number, threshold: number, context: ErrorContext = {}): void {
+    if (duration <= threshold) return;
+
+    const issueData = {
+      id: this.generateErrorId(),
+      type: 'performance_issue',
+      name,
+      duration,
+      threshold,
+      severity: duration > threshold * 2 ? 'high' : 'medium',
+      timestamp: new Date().toISOString(),
+      context
+    };
+
+    appLogger.warn('Performance Issue Detected', {
+      issue_id: issueData.id,
+      name,
+      duration,
+      threshold,
+      severity: issueData.severity
+    });
+
+    this.analytics.trackEvent({
+      event_type: 'performance_issue',
+      user_id: context.user_id,
+      metadata: issueData,
+      timestamp: new Date()
+    });
+  }
+
+  // User feedback integration
+  captureUserFeedback(userId: string, feedback: string, context: ErrorContext = {}): void {
+    const feedbackData = {
+      id: this.generateErrorId(),
+      user_id: userId,
+      feedback,
+      timestamp: new Date().toISOString(),
+      context
+    };
+
+    appLogger.info('User Feedback Captured', feedbackData);
+
+    this.analytics.trackEvent({
+      event_type: 'user_feedback',
+      user_id: userId,
+      metadata: feedbackData,
+      timestamp: new Date()
+    });
+  }
+
+  private generateErrorId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private isCriticalError(error: Error): boolean {
+    const criticalPatterns = [
+      /database.*connection/i,
+      /payment.*failed/i,
+      /authentication.*failed/i,
+      /unauthorized/i,
+      /internal.*server.*error/i,
+    ];
+
+    return criticalPatterns.some(pattern => 
+      pattern.test(error.message) || pattern.test(error.name)
+    );
+  }
+
+  private sendToExternalService(errorData: any): void {
+    // Integrate with Sentry, Bugsnag, or other error tracking services
+    if (process.env.SENTRY_DSN) {
+      // Sentry integration would go here
+      // Sentry.captureException(error, { contexts: errorData.context });
+    }
+
+    // Custom webhook integration
+    if (process.env.ERROR_WEBHOOK_URL) {
+      fetch(process.env.ERROR_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(errorData)
+      }).catch(err => {
+        appLogger.error('Failed to send error to webhook', err);
+      });
+    }
+  }
+
+  private sendCriticalErrorAlert(errorData: any): void {
+    // Send immediate alerts for critical errors
+    if (process.env.SLACK_WEBHOOK_URL) {
+      const slackMessage = {
+        text: `🚨 Critical Error Detected`,
+        attachments: [{
+          color: 'danger',
+          fields: [
+            { title: 'Error', value: errorData.message, short: false },
+            { title: 'Environment', value: errorData.context.environment, short: true },
+            { title: 'Time', value: errorData.timestamp, short: true },
+            { title: 'Error ID', value: errorData.id, short: true },
+          ]
+        }]
+      };
+
+      fetch(process.env.SLACK_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(slackMessage)
+      }).catch(err => {
+        appLogger.error('Failed to send critical error alert', err);
+      });
+    }
+  }
+
+  private setupReactErrorBoundary(): void {
+    // This would be used in a React Error Boundary component
+    (window as any).__ERROR_TRACKER__ = this;
+  }
+}
+
+export const errorTracker = ErrorTracker.getInstance();
+```
+
+### Monitoring Dashboard API (`pages/api/monitoring/dashboard.ts`):
+```typescript
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { supabase } from '../../../lib/supabase';
+import { appLogger } from '../../../lib/logger';
+
+interface MonitoringData {
+  system_health: {
+    uptime: number;
+    memory_usage: number;
+    cpu_usage: number;
+    response_time: number;
+  };
+  error_metrics: {
+    total_errors: number;
+    error_rate: number;
+    critical_errors: number;
+  };
+  performance_metrics: {
+    avg_response_time: number;
+    slow_requests: number;
+    throughput: number;
+  };
+  user_metrics: {
+    active_users: number;
+    new_registrations: number;
+    user_satisfaction: number;
+  };
+  business_metrics: {
+    api_calls: number;
+    video_searches: number;
+    categories_created: number;
+  };
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<MonitoringData | { error: string }>
+) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const timeRange = req.query.range as string || '24h';
+    const endTime = new Date();
+    const startTime = new Date();
+
+    // Calculate start time based on range
+    switch (timeRange) {
+      case '1h':
+        startTime.setHours(startTime.getHours() - 1);
+        break;
+      case '24h':
+        startTime.setHours(startTime.getHours() - 24);
+        break;
+      case '7d':
+        startTime.setDate(startTime.getDate() - 7);
+        break;
+      case '30d':
+        startTime.setDate(startTime.getDate() - 30);
+        break;
+      default:
+        startTime.setHours(startTime.getHours() - 24);
+    }
+
+    // Parallel data fetching
+    const [
+      systemHealth,
+      errorMetrics,
+      performanceMetrics,
+      userMetrics,
+      businessMetrics
+    ] = await Promise.all([
+      getSystemHealth(),
+      getErrorMetrics(startTime, endTime),
+      getPerformanceMetrics(startTime, endTime),
+      getUserMetrics(startTime, endTime),
+      getBusinessMetrics(startTime, endTime)
+    ]);
+
+    const monitoringData: MonitoringData = {
+      system_health: systemHealth,
+      error_metrics: errorMetrics,
+      performance_metrics: performanceMetrics,
+      user_metrics: userMetrics,
+      business_metrics: businessMetrics
+    };
+
+    appLogger.info('Monitoring dashboard data retrieved', {
+      time_range: timeRange,
+      data_points: Object.keys(monitoringData).length
+    });
+
+    res.status(200).json(monitoringData);
+
+  } catch (error) {
+    appLogger.error('Failed to retrieve monitoring data', error);
+    res.status(500).json({ error: 'Failed to retrieve monitoring data' });
+  }
+}
+
+async function getSystemHealth() {
+  const memoryUsage = process.memoryUsage();
+  
+  return {
+    uptime: process.uptime(),
+    memory_usage: Math.round((memoryUsage.heapUsed / memoryUsage.heapTotal) * 100),
+    cpu_usage: 0, // Would need additional monitoring for CPU
+    response_time: 0 // Would be calculated from recent requests
+  };
+}
+
+async function getErrorMetrics(startTime: Date, endTime: Date) {
+  const { data: errors } = await supabase
+    .from('analytics_events')
+    .select('*')
+    .eq('event_type', 'error_captured')
+    .gte('timestamp', startTime.toISOString())
+    .lte('timestamp', endTime.toISOString());
+
+  const totalErrors = errors?.length || 0;
+  const criticalErrors = errors?.filter(e => 
+    e.metadata?.error_type === 'CriticalError'
+  ).length || 0;
+
+  return {
+    total_errors: totalErrors,
+    error_rate: totalErrors / Math.max(1, (endTime.getTime() - startTime.getTime()) / (1000 * 60)), // errors per minute
+    critical_errors: criticalErrors
+  };
+}
+
+async function getPerformanceMetrics(startTime: Date, endTime: Date) {
+  const { data: apiCalls } = await supabase
+    .from('analytics_events')
+    .select('*')
+    .eq('event_type', 'api_performance')
+    .gte('timestamp', startTime.toISOString())
+    .lte('timestamp', endTime.toISOString());
+
+  const durations = apiCalls?.map(call => call.metadata?.duration || 0) || [];
+  const avgResponseTime = durations.length > 0 
+    ? durations.reduce((a, b) => a + b, 0) / durations.length 
+    : 0;
+
+  const slowRequests = durations.filter(duration => duration > 1000).length;
+
+  return {
+    avg_response_time: Math.round(avgResponseTime),
+    slow_requests: slowRequests,
+    throughput: apiCalls?.length || 0
+  };
+}
+
+async function getUserMetrics(startTime: Date, endTime: Date) {
+  const { data: activeUsers } = await supabase
+    .from('analytics_events')
+    .select('user_id')
+    .gte('timestamp', startTime.toISOString())
+    .lte('timestamp', endTime.toISOString());
+
+  const { data: newUsers } = await supabase
+    .from('profiles')
+    .select('*')
+    .gte('created_at', startTime.toISOString())
+    .lte('created_at', endTime.toISOString());
+
+  const uniqueActiveUsers = new Set(
+    activeUsers?.map(u => u.user_id).filter(Boolean) || []
+  ).size;
+
+  return {
+    active_users: uniqueActiveUsers,
+    new_registrations: newUsers?.length || 0,
+    user_satisfaction: 85 // Would be calculated from user feedback
+  };
+}
+
+async function getBusinessMetrics(startTime: Date, endTime: Date) {
+  const { data: apiCalls } = await supabase
+    .from('analytics_events')
+    .select('*')
+    .eq('event_type', 'api_call')
+    .gte('timestamp', startTime.toISOString())
+    .lte('timestamp', endTime.toISOString());
+
+  const { data: videoSearches } = await supabase
+    .from('analytics_events')
+    .select('*')
+    .eq('event_type', 'video_search')
+    .gte('timestamp', startTime.toISOString())
+    .lte('timestamp', endTime.toISOString());
+
+  const { data: categoriesCreated } = await supabase
+    .from('categories')
+    .select('*')
+    .gte('created_at', startTime.toISOString())
+    .lte('created_at', endTime.toISOString());
+
+  return {
+    api_calls: apiCalls?.length || 0,
+    video_searches: videoSearches?.length || 0,
+    categories_created: categoriesCreated?.length || 0
+  };
+}
+```
+
+## Files to Create
+- `lib/logger.ts` - Structured logging service
+- `lib/performance-monitor.ts` - Performance monitoring
+- `lib/error-tracker.ts` - Error tracking and alerting
+- `lib/uptime-monitor.ts` - Uptime monitoring service
+- `pages/api/monitoring/dashboard.ts` - Monitoring dashboard API
+- `pages/api/monitoring/alerts.ts` - Alert management API
+- `src/components/MonitoringDashboard.tsx` - Admin monitoring UI
+
+## Dependencies
+- TASK_017 (Analytics service must exist)
+- TASK_023 (CI/CD for deployment monitoring)
+
+## External Integrations
+- **Error Tracking**: Sentry, Bugsnag, or Rollbar
+- **APM**: New Relic, DataDog, or Vercel Analytics
+- **Uptime Monitoring**: Pingdom, UptimeRobot, or StatusCake
+- **Log Aggregation**: LogDNA, Papertrail, or ELK Stack
+- **Alerting**: PagerDuty, Slack, or email
+
+## Key Metrics to Track
+- **Performance**: Response times, throughput, error rates
+- **Business**: User engagement, API usage, feature adoption
+- **Technical**: Memory usage, CPU utilization, database performance
+- **User Experience**: Core Web Vitals, page load times, conversion rates
+
+## Definition of Done
+- Comprehensive logging implemented across application
+- Performance monitoring collecting key metrics
+- Error tracking and alerting functional
+- Monitoring dashboard accessible to team
+- Alerts configured for critical issues
+- Integration with external monitoring services
+- Documentation for monitoring setup and troubleshooting 

@@ -1,0 +1,357 @@
+# TASK_003_006: Add confirmation dialogs and error handling
+
+## Overview
+Implement AlertDialog components for delete confirmations and comprehensive error handling with toast notifications. Enhance user experience with proper feedback and safety measures.
+
+## Acceptance Criteria
+- [ ] Delete confirmation dialogs using AlertDialog
+- [ ] Error handling with toast notifications
+- [ ] Success feedback messages
+- [ ] Loading states during operations
+- [ ] Network error handling
+- [ ] Form validation error display
+- [ ] Graceful degradation for edge cases
+
+## Technical Requirements
+
+### Confirmation Dialog Implementation:
+```typescript
+// Enhanced CategoryManager with confirmation dialog
+
+"use client";
+
+import React, { useState } from "react";
+import { Trash2, AlertTriangle } from "lucide-react";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "@/components/ui/use-toast";
+import { CategoryManager } from "@/components/CategoryManager";
+
+interface DeleteConfirmationProps {
+  category: Category | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  isDeleting: boolean;
+}
+
+function DeleteConfirmationDialog({
+  category,
+  isOpen,
+  onClose,
+  onConfirm,
+  isDeleting
+}: DeleteConfirmationProps) {
+  if (!category) return null;
+
+  return (
+    <AlertDialog open={isOpen} onOpenChange={onClose}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+            </div>
+            <div>
+              <AlertDialogTitle>Delete Category</AlertDialogTitle>
+              <AlertDialogDescription className="mt-1">
+                Are you sure you want to delete "{category.name}"?
+              </AlertDialogDescription>
+            </div>
+          </div>
+        </AlertDialogHeader>
+        
+        <div className="my-4 rounded-md bg-amber-50 border border-amber-200 p-4">
+          <div className="flex">
+            <AlertTriangle className="h-5 w-5 text-amber-600 mr-3 mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-amber-800">
+              <p className="font-medium mb-1">This action cannot be undone.</p>
+              <ul className="list-disc list-inside space-y-1 text-amber-700">
+                <li>The category and all its settings will be permanently removed</li>
+                <li>Videos currently assigned to this category will become unassigned</li>
+                <li>Category statistics and history will be lost</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            disabled={isDeleting}
+            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Category
+              </>
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+```
+
+### Enhanced Error Handling:
+```typescript
+// Enhanced CategoryManager with error handling
+
+export function CategoryManager({ className }: CategoryManagerProps) {
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    category: Category | null;
+    isOpen: boolean;
+  }>({ category: null, isOpen: false });
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteCategory = (category: Category) => {
+    setDeleteConfirmation({
+      category,
+      isOpen: true
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmation.category) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteCategory(deleteConfirmation.category.id);
+      
+      // Success toast
+      toast({
+        title: "Category deleted",
+        description: `"${deleteConfirmation.category.name}" has been successfully deleted.`,
+        variant: "default",
+      });
+
+      // Close dialog
+      setDeleteConfirmation({ category: null, isOpen: false });
+    } catch (error) {
+      console.error("Failed to delete category:", error);
+      
+      // Error toast
+      toast({
+        title: "Failed to delete category",
+        description: error instanceof Error 
+          ? error.message 
+          : "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    if (!isDeleting) {
+      setDeleteConfirmation({ category: null, isOpen: false });
+    }
+  };
+
+  return (
+    <div className={cn("space-y-6", className)}>
+      {/* Existing CategoryManager content */}
+      
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        category={deleteConfirmation.category}
+        isOpen={deleteConfirmation.isOpen}
+        onClose={closeDeleteDialog}
+        onConfirm={confirmDelete}
+        isDeleting={isDeleting}
+      />
+    </div>
+  );
+}
+```
+
+### Enhanced CategoryForm Error Handling:
+```typescript
+// Enhanced CategoryForm with better error handling
+
+export function CategoryForm({ category, isOpen, onClose, onSuccess }: CategoryFormProps) {
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const onSubmit = async (data: CategoryFormData) => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    
+    try {
+      if (isEditMode && category) {
+        await updateCategory({
+          id: category.id,
+          updates: data,
+        });
+        
+        toast({
+          title: "Category updated",
+          description: `"${data.name}" has been successfully updated.`,
+        });
+      } else {
+        const newCategoryId = await createCategory(data);
+        
+        toast({
+          title: "Category created",
+          description: `"${data.name}" has been successfully created.`,
+        });
+      }
+      
+      form.reset();
+      onClose();
+      onSuccess?.();
+    } catch (error) {
+      console.error("Failed to save category:", error);
+      
+      if (error instanceof Error) {
+        if (error.message.includes("duplicate")) {
+          setSubmitError("A category with this name already exists.");
+        } else if (error.message.includes("network")) {
+          setSubmitError("Network error. Please check your connection and try again.");
+        } else {
+          setSubmitError(error.message);
+        }
+      } else {
+        setSubmitError("An unexpected error occurred. Please try again.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[425px]">
+        {/* Form content */}
+        
+        {/* Error Display */}
+        {submitError && (
+          <div className="rounded-md bg-red-50 border border-red-200 p-3">
+            <div className="flex">
+              <AlertTriangle className="h-5 w-5 text-red-600 mr-2 flex-shrink-0" />
+              <div className="text-sm text-red-800">
+                <p className="font-medium">Error saving category</p>
+                <p className="mt-1">{submitError}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+### Toast Configuration:
+```typescript
+// Add toast provider to app root
+import { Toaster } from "@/components/ui/toaster";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <Toaster />
+      </body>
+    </html>
+  );
+}
+```
+
+## shadcn/ui Components Required
+- `npx shadcn@latest add alert-dialog`
+- `npx shadcn@latest add toast`
+
+## Files to Create/Modify
+- `src/components/CategoryManager.tsx` - Add confirmation dialogs
+- `src/components/ui/CategoryForm.tsx` - Enhanced error handling
+- `src/app/layout.tsx` - Add toast provider
+
+## Dependencies
+- TASK_003_003 (CategoryManager component)
+- TASK_003_001 (CategoryForm component)
+- shadcn/ui components
+- lucide-react icons
+
+## Context7 Best Practices
+- Use semantic error messages
+- Implement progressive disclosure for warnings
+- Provide clear recovery paths
+- Use consistent error styling
+- Follow accessibility guidelines for alerts
+
+## Error Handling Strategy
+- Network errors with retry options
+- Validation errors with specific field feedback
+- Conflict errors with resolution suggestions
+- Success feedback with confirmation
+- Loading states during operations
+
+## User Experience Enhancements
+- Clear confirmation dialogs with consequences
+- Non-blocking error notifications
+- Success feedback for completed actions
+- Progressive disclosure of complex information
+- Accessible error messaging
+
+## Accessibility Requirements
+- ARIA labels for alert dialogs
+- Screen reader announcements for errors
+- Keyboard navigation for dialogs
+- Focus management during errors
+- Clear visual error indicators
+
+## Testing Requirements
+- Test delete confirmation flow
+- Test error scenarios and recovery
+- Test success notifications
+- Test form validation errors
+- Test network error handling
+- Test accessibility with screen readers
+
+## Implementation Notes
+- Use toast notifications for non-blocking feedback
+- Implement proper error boundaries
+- Handle async operation errors gracefully
+- Provide meaningful error messages
+- Enable error recovery where possible
+
+## Edge Cases
+- Handle concurrent operations
+- Network timeout scenarios
+- Component unmounting during operations
+- Multiple error states simultaneously
+- Invalid data recovery
+
+## Definition of Done
+- Delete confirmation dialogs implemented
+- Comprehensive error handling working
+- Toast notifications functioning
+- Success feedback implemented
+- All error scenarios handled gracefully
+- Accessibility requirements met
+- User experience enhanced with proper feedback 

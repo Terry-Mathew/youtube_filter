@@ -1,0 +1,782 @@
+# TASK_020: Implement notification system and user engagement features
+
+## Overview
+Create comprehensive notification system with real-time alerts, email notifications, and user engagement tracking to keep users informed and improve retention.
+
+## Acceptance Criteria
+- [ ] Implement real-time notification system
+- [ ] Create email notification service
+- [ ] Add push notification support (web push)
+- [ ] Implement notification preferences management
+- [ ] Create engagement tracking system
+- [ ] Add notification history and management
+- [ ] Implement smart notification timing
+
+## Technical Requirements
+
+### Notification Service (`lib/notification-service.ts`):
+```typescript
+import { supabase } from './supabase';
+import { AnalyticsService } from './analytics-service';
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  data?: Record<string, any>;
+  read: boolean;
+  created_at: Date;
+  expires_at?: Date;
+  action_url?: string;
+}
+
+export type NotificationType = 
+  | 'new_video_recommendation'
+  | 'category_update'
+  | 'quota_warning'
+  | 'system_update'
+  | 'engagement_milestone'
+  | 'trending_video'
+  | 'personalized_digest';
+
+export interface NotificationPreferences {
+  email_enabled: boolean;
+  push_enabled: boolean;
+  real_time_enabled: boolean;
+  notification_types: {
+    [key in NotificationType]: boolean;
+  };
+  quiet_hours: {
+    enabled: boolean;
+    start_time: string; // HH:MM format
+    end_time: string;
+  };
+  digest_frequency: 'daily' | 'weekly' | 'never';
+}
+
+export class NotificationService {
+  private static instance: NotificationService;
+  private analytics: AnalyticsService;
+  private subscribers: Map<string, (notification: Notification) => void> = new Map();
+
+  constructor() {
+    this.analytics = AnalyticsService.getInstance();
+  }
+
+  static getInstance(): NotificationService {
+    if (!NotificationService.instance) {
+      NotificationService.instance = new NotificationService();
+    }
+    return NotificationService.instance;
+  }
+
+  // Create and send notification
+  async sendNotification(
+    userId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+    data?: Record<string, any>,
+    actionUrl?: string
+  ): Promise<void> {
+    const preferences = await this.getUserPreferences(userId);
+    
+    // Check if user wants this type of notification
+    if (!preferences.notification_types[type]) {
+      return;
+    }
+
+    // Check quiet hours
+    if (this.isQuietHours(preferences)) {
+      // Queue for later delivery
+      await this.queueNotification(userId, type, title, message, data, actionUrl);
+      return;
+    }
+
+    const notification: Notification = {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      type,
+      title,
+      message,
+      data,
+      action_url: actionUrl,
+      read: false,
+      created_at: new Date(),
+      expires_at: this.calculateExpiry(type)
+    };
+
+    // Store in database
+    await this.storeNotification(notification);
+
+    // Send via different channels based on preferences
+    const deliveryPromises: Promise<void>[] = [];
+
+    if (preferences.real_time_enabled) {
+      deliveryPromises.push(this.sendRealTimeNotification(notification));
+    }
+
+    if (preferences.push_enabled) {
+      deliveryPromises.push(this.sendPushNotification(notification));
+    }
+
+    if (preferences.email_enabled && this.shouldSendEmail(type)) {
+      deliveryPromises.push(this.sendEmailNotification(notification));
+    }
+
+    await Promise.allSettled(deliveryPromises);
+
+    // Track notification sent
+    await this.analytics.trackEvent({
+      event_type: 'notification_sent',
+      user_id: userId,
+      metadata: { type, delivery_channels: deliveryPromises.length },
+      timestamp: new Date()
+    });
+  }
+
+  // Real-time notification via WebSocket/SSE
+  private async sendRealTimeNotification(notification: Notification): Promise<void> {
+    const subscriber = this.subscribers.get(notification.user_id);
+    if (subscriber) {
+      subscriber(notification);
+    }
+
+    // Also broadcast via Supabase real-time
+    await supabase
+      .channel(`notifications:${notification.user_id}`)
+      .send({
+        type: 'broadcast',
+        event: 'new_notification',
+        payload: notification
+      });
+  }
+
+  // Push notification via Web Push API
+  private async sendPushNotification(notification: Notification): Promise<void> {
+    try {
+      const { data: subscriptions } = await supabase
+        .from('push_subscriptions')
+        .select('*')
+        .eq('user_id', notification.user_id)
+        .eq('active', true);
+
+      if (!subscriptions || subscriptions.length === 0) {
+        return;
+      }
+
+      const webpush = require('web-push');
+      webpush.setVapidDetails(
+        'mailto:' + process.env.VAPID_EMAIL,
+        process.env.VAPID_PUBLIC_KEY,
+        process.env.VAPID_PRIVATE_KEY
+      );
+
+      const payload = JSON.stringify({
+        title: notification.title,
+        body: notification.message,
+        icon: '/icon-192x192.png',
+        badge: '/badge-72x72.png',
+        data: {
+          url: notification.action_url || '/',
+          notificationId: notification.id
+        }
+      });
+
+      const pushPromises = subscriptions.map(sub => 
+        webpush.sendNotification(sub.subscription, payload)
+      );
+
+      await Promise.allSettled(pushPromises);
+    } catch (error) {
+      console.error('Failed to send push notification:', error);
+    }
+  }
+
+  // Email notification
+  private async sendEmailNotification(notification: Notification): Promise<void> {
+    try {
+      const { data: user } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', notification.user_id)
+        .single();
+
+      if (!user?.email) return;
+
+      const emailService = await import('./email-service');
+      await emailService.sendNotificationEmail(
+        user.email,
+        user.full_name || 'User',
+        notification
+      );
+    } catch (error) {
+      console.error('Failed to send email notification:', error);
+    }
+  }
+
+  // Store notification in database
+  private async storeNotification(notification: Notification): Promise<void> {
+    const { error } = await supabase
+      .from('notifications')
+      .insert({
+        id: notification.id,
+        user_id: notification.user_id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        data: notification.data,
+        action_url: notification.action_url,
+        read: notification.read,
+        created_at: notification.created_at.toISOString(),
+        expires_at: notification.expires_at?.toISOString()
+      });
+
+    if (error) {
+      console.error('Failed to store notification:', error);
+      throw error;
+    }
+  }
+
+  // Get user's notification preferences
+  async getUserPreferences(userId: string): Promise<NotificationPreferences> {
+    const { data } = await supabase
+      .from('notification_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (data) {
+      return data.preferences;
+    }
+
+    // Return default preferences
+    return {
+      email_enabled: true,
+      push_enabled: true,
+      real_time_enabled: true,
+      notification_types: {
+        new_video_recommendation: true,
+        category_update: true,
+        quota_warning: true,
+        system_update: true,
+        engagement_milestone: true,
+        trending_video: false,
+        personalized_digest: true
+      },
+      quiet_hours: {
+        enabled: false,
+        start_time: '22:00',
+        end_time: '08:00'
+      },
+      digest_frequency: 'weekly'
+    };
+  }
+
+  // Update notification preferences
+  async updatePreferences(userId: string, preferences: NotificationPreferences): Promise<void> {
+    const { error } = await supabase
+      .from('notification_preferences')
+      .upsert({
+        user_id: userId,
+        preferences
+      });
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  // Get user's notifications
+  async getUserNotifications(
+    userId: string,
+    limit: number = 50,
+    unreadOnly: boolean = false
+  ): Promise<Notification[]> {
+    let query = supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (unreadOnly) {
+      query = query.eq('read', false);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  // Mark notification as read
+  async markAsRead(notificationId: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', notificationId)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw error;
+    }
+
+    await this.analytics.trackEvent({
+      event_type: 'notification_read',
+      user_id: userId,
+      metadata: { notification_id: notificationId },
+      timestamp: new Date()
+    });
+  }
+
+  // Mark all notifications as read
+  async markAllAsRead(userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', userId)
+      .eq('read', false);
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  // Subscribe to real-time notifications
+  subscribeToNotifications(userId: string, callback: (notification: Notification) => void): () => void {
+    this.subscribers.set(userId, callback);
+
+    // Also subscribe via Supabase
+    const channel = supabase
+      .channel(`notifications:${userId}`)
+      .on('broadcast', { event: 'new_notification' }, (payload) => {
+        callback(payload.payload);
+      })
+      .subscribe();
+
+    return () => {
+      this.subscribers.delete(userId);
+      channel.unsubscribe();
+    };
+  }
+
+  // Helper methods
+  private isQuietHours(preferences: NotificationPreferences): boolean {
+    if (!preferences.quiet_hours.enabled) return false;
+
+    const now = new Date();
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const { start_time, end_time } = preferences.quiet_hours;
+    
+    if (start_time <= end_time) {
+      return currentTime >= start_time && currentTime <= end_time;
+    } else {
+      // Overnight quiet hours
+      return currentTime >= start_time || currentTime <= end_time;
+    }
+  }
+
+  private shouldSendEmail(type: NotificationType): boolean {
+    // Only send emails for important notifications
+    return ['quota_warning', 'system_update', 'personalized_digest'].includes(type);
+  }
+
+  private calculateExpiry(type: NotificationType): Date | undefined {
+    const now = new Date();
+    switch (type) {
+      case 'new_video_recommendation':
+        return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      case 'trending_video':
+        return new Date(now.getTime() + 24 * 60 * 60 * 1000); // 1 day
+      case 'system_update':
+        return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      default:
+        return new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days
+    }
+  }
+
+  private async queueNotification(
+    userId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+    data?: Record<string, any>,
+    actionUrl?: string
+  ): Promise<void> {
+    // Queue notification for later delivery (implement with job queue)
+    console.log('Queuing notification for later delivery:', { userId, type, title });
+  }
+}
+```
+
+### Email Service (`lib/email-service.ts`):
+```typescript
+import { Notification } from './notification-service';
+
+export async function sendNotificationEmail(
+  email: string,
+  name: string,
+  notification: Notification
+): Promise<void> {
+  const emailProvider = process.env.EMAIL_PROVIDER || 'resend';
+
+  switch (emailProvider) {
+    case 'resend':
+      await sendWithResend(email, name, notification);
+      break;
+    case 'sendgrid':
+      await sendWithSendGrid(email, name, notification);
+      break;
+    default:
+      console.log('Email notification (mock):', { email, notification });
+  }
+}
+
+async function sendWithResend(email: string, name: string, notification: Notification): Promise<void> {
+  const { Resend } = require('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
+
+  const template = getEmailTemplate(notification);
+
+  await resend.emails.send({
+    from: 'YouTube Filter <notifications@youtubefilter.com>',
+    to: [email],
+    subject: notification.title,
+    html: template.html,
+    text: template.text
+  });
+}
+
+async function sendWithSendGrid(email: string, name: string, notification: Notification): Promise<void> {
+  const sgMail = require('@sendgrid/mail');
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+  const template = getEmailTemplate(notification);
+
+  await sgMail.send({
+    to: email,
+    from: 'notifications@youtubefilter.com',
+    subject: notification.title,
+    html: template.html,
+    text: template.text
+  });
+}
+
+function getEmailTemplate(notification: Notification): { html: string; text: string } {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const actionUrl = notification.action_url ? `${baseUrl}${notification.action_url}` : baseUrl;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>${notification.title}</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">YouTube Filter</h1>
+      </div>
+      
+      <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <h2 style="color: #333; margin-top: 0;">${notification.title}</h2>
+        <p style="font-size: 16px; line-height: 1.6;">${notification.message}</p>
+        
+        ${notification.action_url ? `
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${actionUrl}" style="background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
+              View Details
+            </a>
+          </div>
+        ` : ''}
+        
+        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+        
+        <p style="font-size: 14px; color: #666; text-align: center;">
+          You can manage your notification preferences in your 
+          <a href="${baseUrl}/settings" style="color: #667eea;">account settings</a>.
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const text = `
+    ${notification.title}
+    
+    ${notification.message}
+    
+    ${notification.action_url ? `View details: ${actionUrl}` : ''}
+    
+    ---
+    You can manage your notification preferences at: ${baseUrl}/settings
+  `;
+
+  return { html, text };
+}
+```
+
+### Notification Components (`src/components/Notifications/NotificationCenter.tsx`):
+```typescript
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardContent } from '../ui/Card';
+import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
+import { NotificationService, Notification } from '../../lib/notification-service';
+import { Bell, Check, Settings, X } from 'lucide-react';
+
+export const NotificationCenter: React.FC = () => {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [notificationService] = useState(() => NotificationService.getInstance());
+
+  useEffect(() => {
+    loadNotifications();
+    
+    // Subscribe to real-time notifications
+    const unsubscribe = notificationService.subscribeToNotifications(
+      'current-user', // TODO: Get actual user ID
+      (notification) => {
+        setNotifications(prev => [notification, ...prev]);
+        setUnreadCount(prev => prev + 1);
+      }
+    );
+
+    return unsubscribe;
+  }, []);
+
+  const loadNotifications = async () => {
+    setLoading(true);
+    try {
+      const [allNotifications, unreadNotifications] = await Promise.all([
+        notificationService.getUserNotifications('current-user', 50),
+        notificationService.getUserNotifications('current-user', 50, true)
+      ]);
+      
+      setNotifications(allNotifications);
+      setUnreadCount(unreadNotifications.length);
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const markAsRead = async (notificationId: string) => {
+    try {
+      await notificationService.markAsRead(notificationId, 'current-user');
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead('current-user');
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+    }
+  };
+
+  const formatTimeAgo = (date: Date): string => {
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return 'just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  };
+
+  const getNotificationIcon = (type: string): string => {
+    switch (type) {
+      case 'new_video_recommendation': return '🎥';
+      case 'category_update': return '📁';
+      case 'quota_warning': return '⚠️';
+      case 'system_update': return '🔄';
+      case 'engagement_milestone': return '🎉';
+      case 'trending_video': return '🔥';
+      case 'personalized_digest': return '📊';
+      default: return '📱';
+    }
+  };
+
+  return (
+    <div className="relative">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setIsOpen(!isOpen)}
+        className="relative"
+      >
+        <Bell className="h-5 w-5" />
+        {unreadCount > 0 && (
+          <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Badge>
+        )}
+      </Button>
+
+      {isOpen && (
+        <Card className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-hidden z-50 shadow-lg">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Notifications</h3>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={markAllAsRead}
+                    className="text-xs"
+                  >
+                    <Check className="h-3 w-3 mr-1" />
+                    Mark all read
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          
+          <CardContent className="p-0 max-h-80 overflow-y-auto">
+            {loading ? (
+              <div className="p-4 text-center text-gray-500">Loading...</div>
+            ) : notifications.length === 0 ? (
+              <div className="p-4 text-center text-gray-500">
+                No notifications yet
+              </div>
+            ) : (
+              <div className="divide-y">
+                {notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`p-3 hover:bg-gray-50 cursor-pointer transition-colors ${
+                      !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                    }`}
+                    onClick={() => markAsRead(notification.id)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="text-lg">
+                        {getNotificationIcon(notification.type)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-sm truncate">
+                            {notification.title}
+                          </p>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {formatTimeAgo(new Date(notification.created_at))}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 line-clamp-2 mt-1">
+                          {notification.message}
+                        </p>
+                        {notification.action_url && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0 h-auto text-xs mt-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.location.href = notification.action_url!;
+                            }}
+                          >
+                            View Details →
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+```
+
+## Files to Create
+- `lib/notification-service.ts` - Core notification management
+- `lib/email-service.ts` - Email notification delivery
+- `src/components/Notifications/NotificationCenter.tsx` - Notification UI
+- `src/components/Notifications/NotificationPreferences.tsx` - User preferences
+- `pages/api/notifications/` - Notification API routes
+- `lib/push-notification-service.ts` - Web push notifications
+
+## Dependencies
+- TASK_012 (Supabase database must exist)
+- TASK_013 (User authentication must exist)
+- TASK_017 (Analytics must be functional)
+
+## Database Schema (SQL):
+```sql
+-- Notifications table
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  data JSONB DEFAULT '{}',
+  action_url VARCHAR(500),
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Notification preferences table
+CREATE TABLE notification_preferences (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  preferences JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Push subscriptions table
+CREATE TABLE push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  subscription JSONB NOT NULL,
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_notifications_user_read ON notifications(user_id, read);
+CREATE INDEX idx_notifications_created_at ON notifications(created_at DESC);
+CREATE INDEX idx_notifications_expires_at ON notifications(expires_at);
+```
+
+## Definition of Done
+- Real-time notification system operational
+- Email notifications working with proper templates
+- Push notification support implemented
+- User notification preferences functional
+- Notification history and management working
+- Smart notification timing and quiet hours
+- Engagement tracking and analytics integrated 

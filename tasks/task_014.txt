@@ -1,0 +1,27 @@
+# TASK_014: Migrate category management to Supabase database
+
+## Overview
+Replace localStorage category storage with Supabase database operations for proper user data persistence.
+
+## Acceptance Criteria
+- [ ] Update Zustand store to use Supabase for categories
+- [ ] Replace localStorage operations with database calls
+- [ ] Add proper error handling for database operations
+- [ ] Implement offline/online sync strategy
+- [ ] Add optimistic updates for better UX
+- [ ] Ensure data consistency across sessions
+
+## Files to Modify
+- `src/store/index.ts` - Update category operations to use Supabase
+- `pages/api/categories/[id].ts` - Connect to Supabase database
+
+## Dependencies
+- TASK_013 (Authentication must be implemented)
+- TASK_003 (CategoryManager component must exist)
+
+## Definition of Done
+- Categories stored in Supabase database
+- Real-time category synchronization working
+- Error handling for database operations
+- Offline functionality maintained
+- User data properly isolated by authentication 

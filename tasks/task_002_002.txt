@@ -1,0 +1,253 @@
+# TASK_002_002: Implement category CRUD operations
+
+## Overview
+Implement comprehensive Create, Read, Update, Delete (CRUD) operations for categories in the Zustand store with proper state management, validation, and TypeScript integration.
+
+## Acceptance Criteria
+- [ ] Create category action with validation and unique ID generation
+- [ ] Update category action with partial updates and optimistic UI
+- [ ] Delete category action with confirmation and cleanup
+- [ ] Bulk operations for multiple categories
+- [ ] Proper error handling and loading states
+- [ ] Category settings CRUD operations
+
+## Technical Requirements
+
+### Create Category Action:
+```typescript
+interface CreateCategoryPayload {
+  name: string;
+  description: string;
+  criteria: string;
+  color?: CategoryColor;
+  icon?: string;
+  tags?: string[];
+}
+
+// Store action
+createCategory: (payload: CreateCategoryPayload) => Promise<CategoryId> => {
+  const categoryId = generateCategoryId();
+  const now = new Date();
+  
+  const newCategory: Category = {
+    id: categoryId,
+    name: payload.name.trim(),
+    description: payload.description.trim(),
+    criteria: payload.criteria.trim(),
+    color: payload.color || 'blue',
+    icon: payload.icon,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+    userId: getCurrentUserId(), // TODO: Replace with actual user ID
+    videoCount: 0,
+    tags: payload.tags || [],
+    sortOrder: get().categories.length,
+    isAiSuggested: false,
+  };
+
+  // Validation
+  if (!validateCategory(newCategory)) {
+    throw new Error('Invalid category data');
+  }
+
+  set((state) => ({
+    categories: [...state.categories, newCategory],
+  }));
+
+  return categoryId;
+};
+```
+
+### Update Category Action:
+```typescript
+interface UpdateCategoryPayload {
+  id: CategoryId;
+  updates: Partial<Omit<Category, 'id' | 'createdAt' | 'userId'>>;
+}
+
+updateCategory: (payload: UpdateCategoryPayload) => Promise<void> => {
+  const { id, updates } = payload;
+  
+  set((state) => ({
+    categoryOperationLoading: {
+      ...state.categoryOperationLoading,
+      [id]: true,
+    },
+  }));
+
+  try {
+    set((state) => ({
+      categories: state.categories.map((category) =>
+        category.id === id
+          ? {
+              ...category,
+              ...updates,
+              updatedAt: new Date(),
+            }
+          : category
+      ),
+      categoryOperationLoading: {
+        ...state.categoryOperationLoading,
+        [id]: false,
+      },
+    }));
+  } catch (error) {
+    set((state) => ({
+      categoryOperationLoading: {
+        ...state.categoryOperationLoading,
+        [id]: false,
+      },
+    }));
+    throw error;
+  }
+};
+```
+
+### Delete Category Action:
+```typescript
+deleteCategory: (categoryId: CategoryId) => Promise<void> => {
+  set((state) => ({
+    categoryOperationLoading: {
+      ...state.categoryOperationLoading,
+      [categoryId]: true,
+    },
+  }));
+
+  try {
+    set((state) => ({
+      categories: state.categories.filter((category) => category.id !== categoryId),
+      categorySettings: Object.fromEntries(
+        Object.entries(state.categorySettings).filter(([key]) => key !== categoryId)
+      ),
+      selectedCategoryIds: state.selectedCategoryIds.filter((id) => id !== categoryId),
+      activeCategoryId: state.activeCategoryId === categoryId ? null : state.activeCategoryId,
+      categoryOperationLoading: Object.fromEntries(
+        Object.entries(state.categoryOperationLoading).filter(([key]) => key !== categoryId)
+      ),
+    }));
+  } catch (error) {
+    set((state) => ({
+      categoryOperationLoading: {
+        ...state.categoryOperationLoading,
+        [categoryId]: false,
+      },
+    }));
+    throw error;
+  }
+};
+```
+
+### Category Settings CRUD:
+```typescript
+updateCategorySettings: (
+  categoryId: CategoryId, 
+  settings: Partial<CategorySettings>
+) => void => {
+  set((state) => ({
+    categorySettings: {
+      ...state.categorySettings,
+      [categoryId]: {
+        ...state.categorySettings[categoryId],
+        ...settings,
+        updatedAt: new Date(),
+      },
+    },
+  }));
+};
+
+getCategorySettings: (categoryId: CategoryId) => CategorySettings | null => {
+  const state = get();
+  return state.categorySettings[categoryId] || null;
+};
+```
+
+### Bulk Operations:
+```typescript
+bulkUpdateCategories: (updates: Array<{ id: CategoryId; updates: Partial<Category> }>) => Promise<void> => {
+  set((state) => ({
+    categoriesLoading: true,
+  }));
+
+  try {
+    set((state) => ({
+      categories: state.categories.map((category) => {
+        const update = updates.find((u) => u.id === category.id);
+        return update
+          ? { ...category, ...update.updates, updatedAt: new Date() }
+          : category;
+      }),
+      categoriesLoading: false,
+    }));
+  } catch (error) {
+    set((state) => ({ categoriesLoading: false }));
+    throw error;
+  }
+};
+
+bulkDeleteCategories: (categoryIds: CategoryId[]) => Promise<void> => {
+  set((state) => ({
+    categoriesLoading: true,
+  }));
+
+  try {
+    set((state) => ({
+      categories: state.categories.filter((category) => !categoryIds.includes(category.id)),
+      categorySettings: Object.fromEntries(
+        Object.entries(state.categorySettings).filter(([key]) => !categoryIds.includes(key as CategoryId))
+      ),
+      selectedCategoryIds: state.selectedCategoryIds.filter((id) => !categoryIds.includes(id)),
+      activeCategoryId: categoryIds.includes(state.activeCategoryId!) ? null : state.activeCategoryId,
+      categoriesLoading: false,
+    }));
+  } catch (error) {
+    set((state) => ({ categoriesLoading: false }));
+    throw error;
+  }
+};
+```
+
+### Validation Utilities:
+```typescript
+const validateCategory = (category: Partial<Category>): boolean => {
+  if (!category.name || category.name.trim().length === 0) return false;
+  if (!category.description || category.description.trim().length === 0) return false;
+  if (!category.criteria || category.criteria.trim().length === 0) return false;
+  if (category.name.length > MAX_CATEGORY_NAME_LENGTH) return false;
+  if (category.description.length > MAX_CATEGORY_DESCRIPTION_LENGTH) return false;
+  if (category.criteria.length > MAX_CATEGORY_CRITERIA_LENGTH) return false;
+  return true;
+};
+
+const generateCategoryId = (): CategoryId => {
+  return `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` as CategoryId;
+};
+
+const getCurrentUserId = (): UserId => {
+  // TODO: Implement actual user ID retrieval
+  return 'temp_user' as UserId;
+};
+```
+
+## Files to Modify
+- `src/store/index.ts` - Add CRUD actions to Zustand store
+
+## Dependencies
+- TASK_002_001 (Category state structure must exist)
+- TASK_001 (TypeScript interfaces must exist)
+
+## Implementation Notes
+- Use immer pattern for immutable state updates
+- Implement optimistic UI updates where appropriate
+- Add proper error handling and rollback mechanisms
+- Use TypeScript generics for type safety
+- Consider performance implications of large category lists
+- Implement validation on both client and server sides
+
+## Definition of Done
+- All CRUD operations implemented and tested
+- Proper TypeScript typing throughout
+- Error handling and loading states working
+- Validation preventing invalid data
+- Bulk operations functional
+- No breaking changes to existing store functionality 

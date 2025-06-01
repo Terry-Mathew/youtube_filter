@@ -1,0 +1,228 @@
+# TASK_006: Create YouTube API key management in Settings
+
+## Overview
+Add YouTube API key input, validation, and secure storage functionality to the existing Settings page, enabling users to configure their own API access.
+
+## Acceptance Criteria
+- [ ] Add API key input section to Settings page
+- [ ] Implement real-time API key validation
+- [ ] Create guided setup instructions for Google Cloud Console
+- [ ] Add secure storage for API keys (localStorage initially)
+- [ ] Show API key status and usage information
+- [ ] Provide test functionality to verify key works
+- [ ] Add clear error messages and troubleshooting help
+
+## Technical Requirements
+
+### New Components:
+```typescript
+interface ApiKeySetupProps {
+  apiKey?: string;
+  onSave: (apiKey: string) => void;
+  onTest: (apiKey: string) => Promise<boolean>;
+  isLoading?: boolean;
+  error?: string;
+}
+
+interface ApiKeyStatusProps {
+  apiKey: string;
+  isValid: boolean;
+  lastTested: string;
+  quotaUsed?: number;
+  quotaLimit?: number;
+}
+```
+
+### Core Features:
+
+1. **API Key Input & Validation**
+   - Secure input field with masked display
+   - Real-time format validation
+   - Test connection functionality
+   - Clear error messaging
+
+2. **Setup Instructions**
+   - Step-by-step Google Cloud Console guide
+   - Visual screenshots/diagrams
+   - Required permissions checklist
+   - Troubleshooting common issues
+
+3. **API Key Management**
+   - Save/update API key
+   - Show/hide key functionality
+   - Delete/reset API key
+   - Key status monitoring
+
+### Implementation Example:
+```typescript
+const ApiKeySetup: React.FC<ApiKeySetupProps> = ({
+  apiKey,
+  onSave,
+  onTest,
+  isLoading,
+  error
+}) => {
+  const [keyInput, setKeyInput] = useState(apiKey || '');
+  const [showKey, setShowKey] = useState(false);
+  const [isTestLoading, setIsTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<boolean | null>(null);
+
+  const handleTest = async () => {
+    if (!keyInput.trim()) return;
+    
+    setIsTestLoading(true);
+    try {
+      const isValid = await onTest(keyInput);
+      setTestResult(isValid);
+    } catch (error) {
+      setTestResult(false);
+    } finally {
+      setIsTestLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* API Key Input */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700">
+          YouTube Data API v3 Key
+        </label>
+        <div className="mt-1 relative">
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            placeholder="Enter your YouTube API key"
+            className="block w-full pr-10 border-gray-300 rounded-md focus:ring-primary-500 focus:border-primary-500"
+          />
+          <button
+            type="button"
+            onClick={() => setShowKey(!showKey)}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center"
+          >
+            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Test & Save Buttons */}
+      <div className="flex space-x-3">
+        <button
+          onClick={handleTest}
+          disabled={!keyInput.trim() || isTestLoading}
+          className="btn-secondary"
+        >
+          {isTestLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          Test Connection
+        </button>
+        
+        <button
+          onClick={() => onSave(keyInput)}
+          disabled={!keyInput.trim() || isLoading}
+          className="btn-primary"
+        >
+          Save API Key
+        </button>
+      </div>
+
+      {/* Status Messages */}
+      {testResult !== null && (
+        <div className={`p-3 rounded-md ${testResult ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+          {testResult ? 'API key is valid and working!' : 'API key test failed. Please check your key and permissions.'}
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+## Files to Modify
+- `src/pages/Settings.tsx` - Add API key management section
+- `src/components/ApiKeySetup.tsx` - New component for key management
+- `pages/api/auth/youtube-key.ts` - API endpoint for key operations
+
+## Dependencies
+- TASK_005 (API routes foundation must exist)
+
+## Integration Points
+- Extend existing Settings page layout
+- Use existing form patterns and styling
+- Integrate with store for API key state management
+- Connect to backend API for validation
+
+## Security Requirements
+- **Storage**: Use localStorage with encryption initially
+- **Display**: Mask API key by default, show/hide toggle
+- **Validation**: Client-side format validation + server-side testing
+- **Transmission**: Always use HTTPS for API key operations
+- **Cleanup**: Clear key from memory after operations
+
+### API Key Validation:
+```typescript
+const validateYouTubeApiKey = async (apiKey: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`/api/auth/youtube-key/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    });
+    
+    const result = await response.json();
+    return result.isValid;
+  } catch (error) {
+    return false;
+  }
+};
+```
+
+## Setup Instructions Content
+- **Step 1**: Create Google Cloud Project
+- **Step 2**: Enable YouTube Data API v3
+- **Step 3**: Create API credentials
+- **Step 4**: Restrict API key (optional but recommended)
+- **Step 5**: Copy key to application
+
+### Required API Permissions:
+- YouTube Data API v3 read access
+- Search functionality
+- Video details retrieval
+- Channel information access
+
+## UI/UX Specifications
+- **Visual Design**: Match existing Settings page sections
+- **Progressive Disclosure**: Show setup instructions when needed
+- **Status Indicators**: Clear visual feedback for key status
+- **Help Text**: Contextual help and troubleshooting
+- **Mobile Responsive**: Works on all device sizes
+
+## Error Handling
+- Invalid API key format
+- Network connectivity issues
+- API quota exceeded
+- Insufficient permissions
+- Rate limiting responses
+
+## Testing Requirements
+- Test with valid/invalid API keys
+- Verify secure storage and retrieval
+- Test validation endpoint functionality
+- Ensure UI updates correctly with status changes
+- Test error handling for various failure scenarios
+
+## Implementation Notes
+- Use existing Settings page patterns
+- Implement proper loading states
+- Add analytics for API key setup completion
+- Cache validation results temporarily
+- Implement retry logic for network failures
+
+## Definition of Done
+- API key input interface complete and integrated
+- Validation functionality working
+- Secure storage implemented
+- Setup instructions clear and comprehensive
+- Error handling robust
+- Integration with Settings page seamless
+- All security requirements met
+- Testing coverage adequate 
