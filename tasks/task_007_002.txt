@@ -1,0 +1,206 @@
+# TASK_007_002: Implement YouTube search functionality
+
+## Objective
+Create search service for videos, channels, and playlists with pagination, filtering, and proper parameter handling using YouTube Data API v3 search endpoint.
+
+## Requirements
+
+### Search Capabilities
+- Video search with keyword queries
+- Channel search and discovery
+- Playlist search functionality
+- Advanced filtering options (duration, upload date, category)
+- Relevance and view count sorting
+- Geographic region and language filtering
+
+### Search Parameters
+Implement comprehensive search parameter handling:
+- `q` - Search query string with proper encoding
+- `type` - Resource type (video, channel, playlist)
+- `order` - Sort order (relevance, date, rating, viewCount, title)
+- `publishedAfter/Before` - Date range filtering
+- `videoDuration` - Duration filtering (short, medium, long)
+- `videoDefinition` - Quality filtering (any, high, standard)
+- `videoCategoryId` - Category-based filtering
+- `regionCode` - Geographic region
+- `relevanceLanguage` - Language preference
+
+### Pagination System
+- Implement proper pagination using `pageToken`
+- Handle `nextPageToken` and `prevPageToken`
+- Track total results and current page
+- Efficient page navigation and caching
+- Maximum results per page optimization
+
+### Advanced Search Features
+- Search suggestions and autocomplete
+- Search history and saved searches
+- Related video discovery
+- Channel-specific video search
+- Playlist content search
+
+## Technical Implementation
+
+### Search Service Structure
+```typescript
+// src/lib/youtube-api.ts (extending YouTubeApiClient)
+export interface SearchOptions {
+  query: string;
+  type?: 'video' | 'channel' | 'playlist';
+  order?: 'relevance' | 'date' | 'rating' | 'viewCount' | 'title';
+  maxResults?: number;
+  pageToken?: string;
+  publishedAfter?: string;
+  publishedBefore?: string;
+  videoDuration?: 'short' | 'medium' | 'long';
+  videoDefinition?: 'any' | 'high' | 'standard';
+  videoCategoryId?: string;
+  regionCode?: string;
+  relevanceLanguage?: string;
+}
+
+export interface SearchResult<T> {
+  items: T[];
+  nextPageToken?: string;
+  prevPageToken?: string;
+  totalResults: number;
+  resultsPerPage: number;
+  kind: string;
+  etag: string;
+}
+
+export class YouTubeApiClient {
+  // Search videos with comprehensive filtering
+  async searchVideos(options: SearchOptions): Promise<SearchResult<YouTubeVideo>>
+  
+  // Search channels
+  async searchChannels(options: SearchOptions): Promise<SearchResult<YouTubeChannel>>
+  
+  // Search playlists
+  async searchPlaylists(options: SearchOptions): Promise<SearchResult<YouTubePlaylist>>
+  
+  // Universal search across all types
+  async search(options: SearchOptions): Promise<SearchResult<YouTubeResource>>
+  
+  // Get search suggestions
+  async getSearchSuggestions(query: string): Promise<string[]>
+  
+  // Get related videos
+  async getRelatedVideos(videoId: string): Promise<YouTubeVideo[]>
+}
+```
+
+### Search Response Types
+```typescript
+// src/types/youtube.ts
+export interface YouTubeSearchResponse {
+  kind: 'youtube#searchListResponse';
+  etag: string;
+  nextPageToken?: string;
+  prevPageToken?: string;
+  regionCode?: string;
+  pageInfo: {
+    totalResults: number;
+    resultsPerPage: number;
+  };
+  items: YouTubeSearchItem[];
+}
+
+export interface YouTubeSearchItem {
+  kind: 'youtube#searchResult';
+  etag: string;
+  id: {
+    kind: string;
+    videoId?: string;
+    channelId?: string;
+    playlistId?: string;
+  };
+  snippet: {
+    publishedAt: string;
+    channelId: string;
+    title: string;
+    description: string;
+    thumbnails: YouTubeThumbnails;
+    channelTitle: string;
+    liveBroadcastContent: string;
+  };
+}
+```
+
+### Search Optimization Features
+- Query preprocessing and sanitization
+- Search result caching with TTL
+- Duplicate result detection and removal
+- Search performance analytics
+- Error handling for malformed queries
+
+### Integration with Learning Tube Categories
+- Map YouTube categories to Learning Tube categories
+- Custom category-based search filtering
+- Educational content prioritization
+- Subject-specific search enhancement
+
+## Acceptance Criteria
+
+### Functional Requirements
+- [ ] Video search returns relevant results with proper ranking
+- [ ] Channel and playlist search work accurately
+- [ ] All filtering options function correctly
+- [ ] Pagination works seamlessly with proper navigation
+- [ ] Search suggestions provide relevant autocomplete options
+
+### Technical Requirements
+- [ ] Efficient API usage with minimal quota consumption
+- [ ] Proper error handling for invalid queries and API limits
+- [ ] Response caching reduces redundant API calls
+- [ ] Search parameters are properly validated and encoded
+- [ ] TypeScript interfaces cover all response structures
+
+### Performance Requirements
+- [ ] Search results load within 2 seconds
+- [ ] Pagination doesn't cause UI lag
+- [ ] Cached results improve subsequent search performance
+- [ ] Memory usage remains optimal for large result sets
+
+### Integration Requirements
+- [ ] Search integrates with Learning Tube category system
+- [ ] Results are compatible with existing VideoCard components
+- [ ] Search state managed through Zustand store
+- [ ] Error feedback integrated with toast system
+
+## Dependencies
+- TASK_007_001: YouTube API client foundation
+- YouTube Data API v3 search endpoint access
+- Zustand store for search state management
+
+## Files to Create/Modify
+- `src/lib/youtube-api.ts` - Search method implementations
+- `src/types/youtube.ts` - Search-specific type definitions
+- `src/lib/search-utils.ts` - Search utility functions
+- `src/api/videos.ts` - Integration with Supabase storage
+
+## Testing Requirements
+- Unit tests for search parameter validation
+- Integration tests with YouTube search API
+- Performance tests for large result sets
+- Error handling tests for various failure scenarios
+- Pagination functionality testing
+
+## Performance Considerations
+- Implement debounced search to reduce API calls
+- Cache search results with appropriate TTL
+- Optimize pagination for smooth user experience
+- Batch related requests when possible
+- Monitor quota usage per search operation
+
+## Security Requirements
+- Sanitize all search inputs to prevent injection
+- Validate search parameters before API calls
+- Rate limiting on search requests
+- Proper error handling without exposing API internals
+
+## Documentation Requirements
+- Document all search parameters and their effects
+- Provide examples for common search scenarios
+- Document pagination best practices
+- Search optimization guidelines 

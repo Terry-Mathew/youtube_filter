@@ -1,0 +1,233 @@
+# TASK_007_003: Build video details and statistics fetching
+
+## Objective
+Implement video metadata retrieval including statistics, content details, and snippet information with proper data mapping and caching strategies.
+
+## Requirements
+
+### Video Information Retrieval
+- Fetch comprehensive video details using `videos.list` endpoint
+- Retrieve video statistics (views, likes, comments, duration)
+- Get video content details (definition, caption availability, etc.)
+- Access video snippet information (title, description, thumbnails)
+- Obtain video status and privacy settings
+- Retrieve video topic details and category information
+
+### Batch Processing Capabilities
+- Support batch video ID requests (up to 50 videos per request)
+- Efficient processing of video lists from search results
+- Parallel processing for large video collections
+- Proper error handling for individual video failures
+- Quota-optimized batch size calculation
+
+### Content Details Features
+- Video duration parsing and formatting
+- Content rating and age restriction information
+- Caption and subtitle availability
+- Video definition (HD, SD) and dimension information
+- Live broadcast status and scheduled start times
+- Geographic restriction and blocked regions
+
+### Statistics and Analytics
+- View count with proper number formatting
+- Like/dislike ratios and engagement metrics
+- Comment count and engagement indicators
+- Favorite count and sharing statistics
+- Real-time statistics updates for live content
+- Historical data comparison capabilities
+
+## Technical Implementation
+
+### Video Details Service Structure
+```typescript
+// src/lib/youtube-api.ts (extending YouTubeApiClient)
+export interface VideoDetailsOptions {
+  videoIds: string[];
+  part?: string[];
+  includeStatistics?: boolean;
+  includeContentDetails?: boolean;
+  includeSnippet?: boolean;
+  includeStatus?: boolean;
+  includeTopicDetails?: boolean;
+}
+
+export interface EnhancedYouTubeVideo {
+  id: string;
+  snippet: {
+    publishedAt: string;
+    channelId: string;
+    title: string;
+    description: string;
+    thumbnails: YouTubeThumbnails;
+    channelTitle: string;
+    tags?: string[];
+    categoryId: string;
+    liveBroadcastContent: string;
+    defaultLanguage?: string;
+    defaultAudioLanguage?: string;
+  };
+  statistics: {
+    viewCount: string;
+    likeCount?: string;
+    dislikeCount?: string;
+    favoriteCount: string;
+    commentCount?: string;
+  };
+  contentDetails: {
+    duration: string;
+    dimension: string;
+    definition: string;
+    caption: string;
+    licensedContent: boolean;
+    regionRestriction?: {
+      allowed?: string[];
+      blocked?: string[];
+    };
+    contentRating: Record<string, string>;
+  };
+  status: {
+    uploadStatus: string;
+    privacyStatus: string;
+    license: string;
+    embeddable: boolean;
+    publicStatsViewable: boolean;
+    madeForKids: boolean;
+  };
+  topicDetails?: {
+    topicIds: string[];
+    relevantTopicIds: string[];
+    topicCategories: string[];
+  };
+}
+
+export class YouTubeApiClient {
+  // Get detailed video information
+  async getVideoDetails(videoIds: string[], options?: VideoDetailsOptions): Promise<EnhancedYouTubeVideo[]>
+  
+  // Get video statistics only
+  async getVideoStatistics(videoIds: string[]): Promise<VideoStatistics[]>
+  
+  // Get single video details with caching
+  async getVideo(videoId: string): Promise<EnhancedYouTubeVideo>
+  
+  // Batch process video details efficiently
+  async batchGetVideoDetails(videoIds: string[]): Promise<Map<string, EnhancedYouTubeVideo>>
+  
+  // Get video content rating information
+  async getVideoContentRating(videoId: string): Promise<ContentRating>
+  
+  // Check video availability in region
+  async checkVideoAvailability(videoId: string, regionCode?: string): Promise<AvailabilityInfo>
+}
+```
+
+### Data Processing and Transformation
+```typescript
+// src/lib/youtube-transformers.ts
+export class VideoDataTransformer {
+  // Parse ISO 8601 duration to human readable format
+  static parseDuration(isoDuration: string): {
+    hours: number;
+    minutes: number;
+    seconds: number;
+    totalSeconds: number;
+    formatted: string;
+  }
+  
+  // Format view count numbers
+  static formatViewCount(viewCount: string): string
+  
+  // Calculate engagement metrics
+  static calculateEngagement(statistics: VideoStatistics): EngagementMetrics
+  
+  // Extract and clean video description
+  static processDescription(description: string): ProcessedDescription
+  
+  // Parse and validate video tags
+  static processTags(tags: string[]): ProcessedTags
+  
+  // Transform YouTube categories to Learning Tube categories
+  static mapToLearningTubeCategory(categoryId: string): LearningTubeCategory
+}
+```
+
+### Caching Strategy
+- Implement intelligent caching with TTL based on content type
+- Cache video details with longer TTL for older videos
+- Real-time cache invalidation for live content
+- Memory-efficient caching with LRU eviction
+- Persistent caching using Supabase storage
+
+### Error Handling and Validation
+- Handle deleted or private video scenarios
+- Graceful degradation for restricted content
+- Validation of video ID formats
+- Retry logic for temporary API failures
+- Comprehensive error reporting with context
+
+## Acceptance Criteria
+
+### Functional Requirements
+- [ ] Successfully retrieves comprehensive video details
+- [ ] Batch processing works efficiently for multiple videos
+- [ ] Statistics are accurate and properly formatted
+- [ ] Content details include all relevant metadata
+- [ ] Error handling gracefully manages unavailable videos
+
+### Technical Requirements
+- [ ] Efficient API usage with minimal quota consumption
+- [ ] Proper caching reduces redundant API calls
+- [ ] Data transformation provides consistent format
+- [ ] TypeScript interfaces ensure type safety
+- [ ] Performance optimized for large video lists
+
+### Data Quality Requirements
+- [ ] Duration parsing works for all formats
+- [ ] View counts display human-readable numbers
+- [ ] Content ratings are properly interpreted
+- [ ] Regional restrictions are accurately identified
+- [ ] Live content status is correctly detected
+
+### Integration Requirements
+- [ ] Compatible with existing video display components
+- [ ] Integrates with Supabase for persistent caching
+- [ ] Works seamlessly with search result processing
+- [ ] Supports Learning Tube category mapping
+
+## Dependencies
+- TASK_007_001: YouTube API client foundation
+- YouTube Data API v3 videos.list endpoint
+- Data transformation utilities
+
+## Files to Create/Modify
+- `src/lib/youtube-api.ts` - Video details methods
+- `src/types/youtube.ts` - Video detail type definitions
+- `src/lib/youtube-transformers.ts` - Data transformation utilities
+- `src/lib/video-cache.ts` - Caching implementation
+- `src/api/videos.ts` - Supabase integration for caching
+
+## Testing Requirements
+- Unit tests for data transformation functions
+- Integration tests with YouTube videos API
+- Batch processing performance tests
+- Caching functionality verification
+- Error handling scenario testing
+
+## Performance Considerations
+- Optimize batch sizes for API efficiency
+- Implement progressive loading for large lists
+- Use efficient data structures for caching
+- Monitor memory usage for video collections
+- Minimize API calls through intelligent caching
+
+## Security Requirements
+- Validate all video IDs before API calls
+- Handle sensitive content appropriately
+- Secure caching without exposing user data
+- Proper error messages without API key exposure
+
+## Documentation Requirements
+- Document video data structure and transformations
+- Provide caching strategy guidelines
+- Document batch processing best practices
+- Include error handling examples 

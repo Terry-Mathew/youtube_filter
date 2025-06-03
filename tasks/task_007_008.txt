@@ -1,0 +1,280 @@
+# TASK_007_008: Create YouTube data transformation utilities
+
+## Objective
+Build data mapping and transformation utilities to convert YouTube API responses to application-specific formats with proper type safety and validation.
+
+## Requirements
+
+### Data Normalization
+- Standardize YouTube API response formats across different endpoints
+- Convert YouTube data structures to Learning Tube data models
+- Handle inconsistent data fields and optional properties
+- Normalize timestamps, durations, and numeric values
+- Standardize thumbnail URLs and quality variants
+
+### Type Safety and Validation
+- Runtime validation of YouTube API responses
+- Type guards for different YouTube resource types
+- Schema validation for data integrity
+- Error handling for malformed data
+- Default value assignment for missing fields
+
+### Performance Optimization
+- Efficient data transformation algorithms
+- Caching of transformation results
+- Lazy evaluation for expensive transformations
+- Memory-efficient processing of large datasets
+- Batch transformation capabilities
+
+## Technical Implementation
+
+### Core Transformation Engine
+```typescript
+// src/lib/youtube-transformers.ts
+export interface TransformationConfig {
+  validateInput: boolean;
+  includeDefaults: boolean;
+  preserveOriginal: boolean;
+  skipEmptyFields: boolean;
+}
+
+export class YouTubeDataTransformer {
+  private config: TransformationConfig;
+  private validators: Map<string, ValidationSchema>;
+  private cache: TransformationCache;
+
+  // Transform search results to standardized format
+  transformSearchResults(
+    searchResponse: YouTubeSearchResponse,
+    options?: TransformOptions
+  ): StandardizedVideo[]
+
+  // Transform video details to Learning Tube format
+  transformVideoDetails(
+    videoResponse: YouTubeVideoResponse,
+    options?: TransformOptions
+  ): LearningTubeVideo[]
+
+  // Transform channel information
+  transformChannelData(
+    channelResponse: YouTubeChannelResponse
+  ): StandardizedChannel[]
+
+  // Transform playlist data
+  transformPlaylistData(
+    playlistResponse: YouTubePlaylistResponse
+  ): StandardizedPlaylist[]
+
+  // Batch transform multiple resource types
+  batchTransform<T, R>(
+    items: T[],
+    transformer: (item: T) => R,
+    options?: BatchTransformOptions
+  ): R[]
+}
+```
+
+### Data Type Converters
+```typescript
+// src/lib/data-converters.ts
+export class DataConverters {
+  // Convert ISO 8601 duration to seconds
+  static parseDuration(isoDuration: string): number
+
+  // Convert view count string to number
+  static parseViewCount(viewCountString: string): number
+
+  // Format numbers for display
+  static formatNumber(value: number, format: 'compact' | 'full'): string
+
+  // Parse and validate timestamps
+  static parseTimestamp(timestamp: string): Date
+
+  // Convert YouTube thumbnail to standardized format
+  static transformThumbnail(
+    thumbnails: YouTubeThumbnails
+  ): StandardizedThumbnail
+
+  // Extract and clean text content
+  static cleanTextContent(text: string): string
+
+  // Parse video tags and keywords
+  static parseTags(tags: string[]): ProcessedTag[]
+
+  // Convert YouTube categories to Learning Tube categories
+  static mapCategory(youtubeCategoryId: string): string[]
+}
+```
+
+### Validation System
+```typescript
+// src/lib/validation-schemas.ts
+export const YouTubeVideoSchema = z.object({
+  id: z.string(),
+  snippet: z.object({
+    title: z.string(),
+    description: z.string().optional(),
+    publishedAt: z.string(),
+    channelId: z.string(),
+    channelTitle: z.string(),
+    thumbnails: ThumbnailSchema,
+    categoryId: z.string().optional(),
+    tags: z.array(z.string()).optional()
+  }),
+  statistics: z.object({
+    viewCount: z.string().optional(),
+    likeCount: z.string().optional(),
+    commentCount: z.string().optional()
+  }).optional(),
+  contentDetails: z.object({
+    duration: z.string(),
+    definition: z.string().optional(),
+    caption: z.string().optional()
+  }).optional()
+});
+
+export class DataValidator {
+  // Validate YouTube API response
+  static validateResponse<T>(
+    data: unknown,
+    schema: z.ZodSchema<T>
+  ): ValidationResult<T>
+
+  // Validate individual fields
+  static validateField(
+    value: unknown,
+    fieldType: FieldType
+  ): FieldValidationResult
+
+  // Sanitize and normalize data
+  static sanitizeData(data: any): any
+
+  // Check data completeness
+  static checkCompleteness(
+    data: any,
+    requiredFields: string[]
+  ): CompletenessReport
+}
+```
+
+### Standardized Data Models
+```typescript
+// src/types/standardized.ts
+export interface StandardizedVideo {
+  id: string;
+  title: string;
+  description: string;
+  channelId: string;
+  channelTitle: string;
+  publishedAt: Date;
+  duration: number; // in seconds
+  viewCount: number;
+  likeCount?: number;
+  commentCount?: number;
+  thumbnails: StandardizedThumbnail;
+  categories: string[];
+  tags: string[];
+  quality: VideoQuality;
+  availability: VideoAvailability;
+  engagement: EngagementMetrics;
+  learningTubeMetadata: LearningTubeMetadata;
+}
+
+export interface LearningTubeMetadata {
+  educationalValue: number; // 0-1 score
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  subjects: string[];
+  estimatedWatchTime: number;
+  prerequisites: string[];
+  learningObjectives: string[];
+}
+
+export interface EngagementMetrics {
+  likeRatio: number;
+  engagementRate: number;
+  commentRate: number;
+  watchTimeScore: number;
+}
+```
+
+### Transformation Pipeline
+```typescript
+// src/lib/transformation-pipeline.ts
+export class TransformationPipeline {
+  private steps: TransformationStep[];
+  private middleware: TransformationMiddleware[];
+
+  // Add transformation step
+  addStep(step: TransformationStep): this
+
+  // Add middleware for cross-cutting concerns
+  addMiddleware(middleware: TransformationMiddleware): this
+
+  // Execute complete transformation pipeline
+  async transform<T, R>(input: T): Promise<R>
+
+  // Execute partial transformation
+  async partialTransform<T, R>(
+    input: T,
+    stepNames: string[]
+  ): Promise<Partial<R>>
+
+  // Get transformation performance metrics
+  getMetrics(): TransformationMetrics
+}
+```
+
+## Acceptance Criteria
+
+### Functional Requirements
+- [ ] All YouTube API responses are correctly transformed
+- [ ] Data validation catches malformed responses
+- [ ] Type safety is maintained throughout transformations
+- [ ] Performance is optimized for large datasets
+- [ ] Error handling gracefully manages transformation failures
+
+### Technical Requirements
+- [ ] Comprehensive test coverage for all transformers
+- [ ] Runtime validation with proper error reporting
+- [ ] Efficient memory usage for large transformations
+- [ ] Extensible architecture for new data types
+- [ ] Integration with existing TypeScript interfaces
+
+### Data Quality Requirements
+- [ ] Accurate data type conversions
+- [ ] Consistent field naming across transformations
+- [ ] Proper handling of optional and missing fields
+- [ ] Data integrity validation
+- [ ] Preservation of important metadata
+
+## Dependencies
+- TASK_007_003: Video details and statistics fetching
+- Zod validation library
+- Data normalization utilities
+
+## Files to Create/Modify
+- `src/lib/youtube-transformers.ts` - Main transformation engine
+- `src/lib/data-converters.ts` - Data type converters
+- `src/lib/validation-schemas.ts` - Validation schemas
+- `src/types/standardized.ts` - Standardized data models
+- `src/lib/transformation-pipeline.ts` - Pipeline architecture
+
+## Testing Requirements
+- Unit tests for all transformation functions
+- Property-based testing for data validation
+- Performance tests with large datasets
+- Edge case testing for malformed data
+- Integration tests with real YouTube API responses
+
+## Performance Considerations
+- Lazy evaluation for expensive transformations
+- Efficient algorithms for large data processing
+- Memory pooling for frequent transformations
+- Caching of transformation results
+- Streaming processing for very large datasets
+
+## Documentation Requirements
+- Document transformation mapping strategies
+- Provide examples for each transformer
+- Document validation schema patterns
+- Include performance optimization guidelines 

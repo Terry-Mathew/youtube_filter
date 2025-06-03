@@ -1,0 +1,228 @@
+TASK_006_003: Integrate API key storage with Supabase auth
+
+DESCRIPTION:
+Extend src/api/auth.ts with secure API key management functions: setupApiKey, getApiKeys, deleteApiKey, and updateApiKey with proper encryption preparation. This task implements the backend storage layer for API key management using Supabase.
+
+DEPENDENCIES:
+- TASK_006_001 (ApiKeySetup component) - Component will use these storage functions
+- TASK_012 (Supabase database setup) - Required for database tables and RLS policies
+
+ANTICIPATES:
+- TASK_015 (API key encryption) - Will enhance security with encryption at rest
+
+FILES TO MODIFY:
+1. src/api/auth.ts
+   - Extend existing auth API with key management functions
+   - Add CRUD operations for API keys
+   - Implement user association and validation
+   - Prepare for encryption integration
+
+2. src/types/index.ts
+   - Add API key related TypeScript interfaces
+   - Define request/response types
+   - Add validation schemas
+
+IMPLEMENTATION DETAILS:
+
+1. API Key Storage Interface:
+   ```typescript
+   export interface ApiKeyInfo {
+     id: string;
+     service: 'youtube' | 'openai';
+     keyPreview: string; // Last 4 characters only
+     description?: string;
+     isValid: boolean;
+     createdAt: Date;
+     lastUsed?: Date;
+     usageCount?: number;
+     quotaInfo?: {
+       dailyLimit: number;
+       used: number;
+       resetTime: Date;
+     };
+   }
+
+   export interface SetupApiKeyRequest {
+     service: 'youtube' | 'openai';
+     apiKey: string;
+     description?: string;
+   }
+
+   export interface UpdateApiKeyRequest {
+     keyId: string;
+     description?: string;
+     isValid?: boolean;
+   }
+   ```
+
+2. Auth API Extensions:
+   ```typescript
+   // Add to existing AuthApi class in src/api/auth.ts
+   
+   /**
+    * Store encrypted API key for user
+    */
+   async setupApiKey(request: SetupApiKeyRequest): Promise<ApiResponse<ApiKeyInfo>> {
+     try {
+       const { user, error: authError } = await supabaseService.getUser();
+       if (authError || !user) {
+         throw new Error('User not authenticated');
+       }
+
+       // Validate API key format before storing
+       const isValidFormat = this.validateKeyFormat(request.service, request.apiKey);
+       if (!isValidFormat) {
+         throw new Error(`Invalid ${request.service} API key format`);
+       }
+
+       // TODO: Encrypt API key in TASK_015
+       const encryptedKey = request.apiKey; // Placeholder for encryption
+       
+       const keyData = {
+         user_id: user.id,
+         service: request.service,
+         encrypted_key: encryptedKey,
+         key_preview: request.apiKey.slice(-4),
+         description: request.description,
+         is_valid: true,
+         created_at: new Date().toISOString(),
+         usage_count: 0,
+       };
+
+       // TODO: Replace with actual Supabase insertion in TASK_012
+       const apiKeyInfo: ApiKeyInfo = {
+         id: crypto.randomUUID(),
+         service: request.service,
+         keyPreview: request.apiKey.slice(-4),
+         description: request.description,
+         isValid: true,
+         createdAt: new Date(),
+         usageCount: 0,
+       };
+
+       return {
+         success: true,
+         data: apiKeyInfo,
+         timestamp: new Date(),
+         requestId: crypto.randomUUID(),
+       };
+     } catch (error) {
+       return {
+         success: false,
+         error: error instanceof Error ? error.message : 'Failed to setup API key',
+         timestamp: new Date(),
+       };
+     }
+   }
+   ```
+
+3. Database Schema (prepared for TASK_012):
+   ```sql
+   CREATE TABLE user_api_keys (
+     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+     service TEXT NOT NULL CHECK (service IN ('youtube', 'openai')),
+     encrypted_key TEXT NOT NULL,
+     key_preview TEXT NOT NULL, -- Last 4 characters
+     description TEXT,
+     is_valid BOOLEAN DEFAULT true,
+     created_at TIMESTAMPTZ DEFAULT NOW(),
+     updated_at TIMESTAMPTZ DEFAULT NOW(),
+     last_used TIMESTAMPTZ,
+     usage_count INTEGER DEFAULT 0,
+     quota_info JSONB,
+     UNIQUE(user_id, service)
+   );
+
+   -- Row Level Security
+   ALTER TABLE user_api_keys ENABLE ROW LEVEL SECURITY;
+   
+   CREATE POLICY "Users can manage their own API keys" ON user_api_keys
+     FOR ALL USING (auth.uid() = user_id);
+   ```
+
+4. CRUD Operations:
+   ```typescript
+   /**
+    * Get all API keys for current user
+    */
+   async getApiKeys(): Promise<ApiResponse<ApiKeyInfo[]>> {
+     // Implementation with Supabase query
+   }
+
+   /**
+    * Update API key metadata
+    */
+   async updateApiKey(request: UpdateApiKeyRequest): Promise<ApiResponse<ApiKeyInfo>> {
+     // Implementation with Supabase update
+   }
+
+   /**
+    * Delete API key
+    */
+   async deleteApiKey(keyId: string): Promise<ApiResponse<void>> {
+     // Implementation with Supabase deletion
+   }
+
+   /**
+    * Get decrypted API key for usage (internal use only)
+    */
+   async getDecryptedApiKey(service: 'youtube' | 'openai'): Promise<string | null> {
+     // TODO: Implement with proper decryption in TASK_015
+   }
+
+   /**
+    * Update usage statistics
+    */
+   async updateApiKeyUsage(service: 'youtube' | 'openai', quotaUsed: number): Promise<void> {
+     // Implementation for usage tracking
+   }
+   ```
+
+5. Validation Helpers:
+   ```typescript
+   private validateKeyFormat(service: string, key: string): boolean {
+     switch (service) {
+       case 'youtube':
+         return key.startsWith('AIza') && key.length === 39;
+       case 'openai':
+         return key.startsWith('sk-') && key.length >= 51;
+       default:
+         return false;
+     }
+   }
+   ```
+
+SECURITY IMPLEMENTATION:
+
+1. Row Level Security (RLS):
+   - Users can only access their own API keys
+   - Automatic user_id association
+   - Secure query policies
+
+2. Data Protection:
+   - Only store last 4 characters in preview
+   - Prepare for encryption at rest (TASK_015)
+   - Secure key retrieval with authentication
+
+3. Access Control:
+   - Require user authentication for all operations
+   - Validate user ownership of keys
+   - Audit trail for key operations
+
+VALIDATION CRITERIA:
+- ✓ API key CRUD operations work correctly
+- ✓ User authentication is required for all operations
+- ✓ Only key previews are exposed in responses
+- ✓ Database integration works with RLS policies
+- ✓ Error handling provides appropriate feedback
+- ✓ TypeScript types are comprehensive
+- ✓ Encryption preparation is in place
+- ✓ Usage tracking is implemented
+
+INTEGRATION NOTES:
+- Functions integrate with existing AuthApi class
+- Prepared for encryption enhancement in TASK_015
+- Database schema ready for TASK_012 implementation
+- Usage tracking prepares for analytics in TASK_017
+- Security measures align with Supabase best practices 

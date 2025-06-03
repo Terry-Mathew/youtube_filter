@@ -945,42 +945,42 @@ export const useAppStore = create<AppState>()(
       // Existing State (unchanged)
       // =============================================================================
       
-      // Search state
-      searchQuery: '',
-      setSearchQuery: (query) => set({ searchQuery: query }),
-      isSearching: false,
-      setIsSearching: (isSearching) => set({ isSearching }),
+  // Search state
+  searchQuery: '',
+  setSearchQuery: (query) => set({ searchQuery: query }),
+  isSearching: false,
+  setIsSearching: (isSearching) => set({ isSearching }),
 
-      // Video results
-      videos: [],
-      setVideos: (videos) => set({ videos }),
-      
-      // Search history
-      searchHistory: [],
-      addToSearchHistory: (item) => set((state) => ({
-        searchHistory: [
-          {
-            id: crypto.randomUUID(),
-            timestamp: Date.now(),
-            ...item,
-          },
-          ...state.searchHistory.slice(0, 9), // Keep only the 10 most recent searches
-        ],
-      })),
-      clearSearchHistory: () => set({ searchHistory: [] }),
-      
-      // User preferences
-      userPreferences: {
-        theme: 'light',
-        resultCount: 10,
-        autoplay: false,
+  // Video results
+  videos: [],
+  setVideos: (videos) => set({ videos }),
+  
+  // Search history
+  searchHistory: [],
+  addToSearchHistory: (item) => set((state) => ({
+    searchHistory: [
+      {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        ...item,
       },
-      updateUserPreferences: (preferences) => set((state) => ({
-        userPreferences: {
-          ...state.userPreferences,
-          ...preferences,
-        },
-      })),
+      ...state.searchHistory.slice(0, 9), // Keep only the 10 most recent searches
+    ],
+  })),
+  clearSearchHistory: () => set({ searchHistory: [] }),
+  
+  // User preferences
+  userPreferences: {
+    theme: 'light',
+    resultCount: 10,
+    autoplay: false,
+  },
+  updateUserPreferences: (preferences) => set((state) => ({
+    userPreferences: {
+      ...state.userPreferences,
+      ...preferences,
+    },
+  })),
 
       // =============================================================================
       // Category State (from previous tasks)

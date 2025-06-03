@@ -1,0 +1,81 @@
+{
+  "id": "TASK_006",
+  "title": "Create YouTube API key management in Settings",
+  "description": "Add API key input, validation, and secure storage to existing Settings page using Supabase for storage",
+  "status": "Not Started",
+  "priority": "High",
+  "dependencies": ["TASK_005", "TASK_012"],
+  "complexity": 7,
+  "phase": "API Integration", 
+  "component_integration": "src/pages/Settings.tsx",
+  "files_to_modify": ["src/pages/Settings.tsx", "src/components/ApiKeySetup.tsx", "src/api/auth.ts"],
+  "task_file": "tasks/task_006.txt",
+  "subtasks": [
+    {
+      "id": "TASK_006_001",
+      "title": "Create ApiKeySetup component with shadcn UI",
+      "description": "Build reusable component for YouTube API key configuration using shadcn/ui Form, Input, Button, and Card components with proper validation and user experience patterns",
+      "status": "Completed",
+      "priority": "High",
+      "dependencies": ["TASK_005"],
+      "complexity": 4,
+      "files_to_modify": ["src/components/ApiKeySetup.tsx"],
+      "task_file": "tasks/task_006_001.txt"
+    },
+    {
+      "id": "TASK_006_002",
+      "title": "Implement YouTube API key validation logic",
+      "description": "Create validation service for YouTube Data API v3 keys including format validation, test API calls, quota verification, and connection status feedback",
+      "status": "Completed",
+      "priority": "High",
+      "dependencies": ["TASK_006_001"],
+      "complexity": 5,
+      "files_to_modify": ["src/lib/youtube-validation.ts", "src/components/ApiKeySetup.tsx"],
+      "task_file": "tasks/task_006_002.txt"
+    },
+    {
+      "id": "TASK_006_003",
+      "title": "Integrate API key storage with Supabase auth",
+      "description": "Extend src/api/auth.ts with secure API key management functions: setupApiKey, getApiKeys, deleteApiKey, and updateApiKey with proper encryption preparation",
+      "status": "Completed",
+      "priority": "High",
+      "dependencies": ["TASK_006_001", "TASK_012"],
+      "complexity": 6,
+      "files_to_modify": ["src/api/auth.ts", "src/types/index.ts"],
+      "task_file": "tasks/task_006_003.txt"
+    },
+    {
+      "id": "TASK_006_004",
+      "title": "Add API key management to Settings page",
+      "description": "Integrate ApiKeySetup component into existing Settings page with proper navigation, responsive layout, and consistent styling using shadcn/ui Tabs and Card components",
+      "status": "Completed",
+      "priority": "Medium",
+      "dependencies": ["TASK_006_001"],
+      "complexity": 3,
+      "files_to_modify": ["src/pages/Settings.tsx"],
+      "task_file": "tasks/task_006_004.txt"
+    },
+    {
+      "id": "TASK_006_005",
+      "title": "Implement error handling and user feedback",
+      "description": "Add comprehensive error handling with toast notifications, loading states, and user-friendly error messages for API key operations using shadcn/ui Toast and Alert components",
+      "status": "Completed",
+      "priority": "Medium",
+      "dependencies": ["TASK_006_003"],
+      "complexity": 3,
+      "files_to_modify": ["src/components/ApiKeySetup.tsx", "src/lib/error-handler.ts"],
+      "task_file": "tasks/task_006_005.txt"
+    },
+    {
+      "id": "TASK_006_006",
+      "title": "Add documentation and help text",
+      "description": "Create help text, documentation links, and onboarding guidance for YouTube API key setup including step-by-step instructions and troubleshooting tips",
+      "status": "Completed",
+      "priority": "Low",
+      "dependencies": ["TASK_006_004"],
+      "complexity": 2,
+      "files_to_modify": ["src/components/ApiKeySetup.tsx", "src/components/ui/HelpTooltip.tsx"],
+      "task_file": "tasks/task_006_006.txt"
+    }
+  ]
+} 

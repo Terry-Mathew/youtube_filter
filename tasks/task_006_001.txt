@@ -1,0 +1,91 @@
+TASK_006_001: Create ApiKeySetup component with shadcn UI
+
+DESCRIPTION:
+Build reusable component for YouTube API key configuration using shadcn/ui Form, Input, Button, and Card components with proper validation and user experience patterns. This component will serve as the foundation for all API key management operations.
+
+DEPENDENCIES:
+- TASK_005 (Supabase API foundation) - Required for integration with auth system
+
+ANTICIPATES:
+- TASK_006_002 (YouTube API validation) - Will integrate validation logic
+- TASK_006_003 (Supabase storage) - Will connect to storage functions
+
+FILES TO MODIFY:
+1. src/components/ApiKeySetup.tsx
+   - New component for YouTube API key management
+   - shadcn/ui Form with proper validation
+   - Input field with secure handling
+   - Action buttons (Save, Test, Delete)
+   - Status display and feedback
+
+IMPLEMENTATION DETAILS:
+
+1. Component Structure:
+   ```typescript
+   interface ApiKeySetupProps {
+     service: 'youtube' | 'openai';
+     onSave?: (key: string) => void;
+     onDelete?: () => void;
+     onTest?: (key: string) => Promise<boolean>;
+     existingKey?: ApiKeyInfo;
+   }
+   ```
+
+2. shadcn/ui Components to Use:
+   - Card for container layout
+   - Form for form handling with react-hook-form
+   - Input for API key entry
+   - Button for actions (Save, Test, Delete)
+   - Badge for status indicators
+   - Alert for important messages
+   - Label for form labels
+
+3. Form Validation:
+   - Required field validation
+   - API key format validation (YouTube: AIza...)
+   - Real-time validation feedback
+   - Custom validation messages
+
+4. State Management:
+   - Loading states for async operations
+   - Form state with react-hook-form
+   - Error state handling
+   - Success state indication
+
+5. User Experience Features:
+   - Key preview (show only last 4 characters)
+   - Copy to clipboard functionality
+   - Visual feedback for all actions
+   - Responsive design for mobile/desktop
+   - Accessibility support (ARIA labels, keyboard navigation)
+
+COMPONENT LAYOUT:
+```
+┌─ API Key Management Card ─────────────────┐
+│ YouTube Data API v3 Configuration        │
+│                                           │
+│ API Key: [Input Field]          [Test]   │
+│ Status: ● Connected (last 4 chars)       │
+│                                           │
+│ [Save Key]  [Delete Key]                 │
+│                                           │
+│ ℹ️ Help: Where to get your API key       │
+└───────────────────────────────────────────┘
+```
+
+VALIDATION CRITERIA:
+- ✓ Component renders without errors
+- ✓ Form validation works correctly
+- ✓ All shadcn/ui components integrate properly
+- ✓ Loading states display during operations
+- ✓ Error handling provides user feedback
+- ✓ Component is responsive across screen sizes
+- ✓ Accessibility requirements are met
+- ✓ TypeScript types are properly defined
+
+INTEGRATION NOTES:
+- Component designed for reuse with different API services
+- Validation logic will be externalized in TASK_006_002
+- Storage operations will connect to TASK_006_003
+- Help documentation will be enhanced in TASK_006_006
+- Follows existing design patterns in the application 

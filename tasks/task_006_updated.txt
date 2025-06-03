@@ -1,0 +1,122 @@
+TASK_006: Create YouTube API key management in Settings
+
+DESCRIPTION:
+Add API key input, validation, and secure storage to existing Settings page using Supabase for storage. This task implements secure API key management for YouTube Data API v3 integration with proper encryption and user experience.
+
+ARCHITECTURE CHANGE:
+- FROM: Next.js API route (pages/api/auth/youtube-key.ts)
+- TO: Supabase client-side API (src/api/auth.ts with Supabase storage)
+
+DEPENDENCIES:
+- TASK_005 (Supabase API foundation) - Required for auth API layer
+- TASK_012 (Supabase database setup) - Required for secure key storage tables
+
+ANTICIPATES:
+- TASK_007 (YouTube API integration) - Will use stored API keys
+- TASK_015 (API key encryption) - Will enhance security measures
+
+FILES TO MODIFY:
+1. src/pages/Settings.tsx
+   - Add API key management section
+   - Integration with ApiKeySetup component
+   - User feedback and status display
+   - Settings navigation enhancement
+
+2. src/components/ApiKeySetup.tsx
+   - New component for API key configuration
+   - Input validation and format checking
+   - Connection testing functionality
+   - Key status and usage display
+   - Delete/regenerate key options
+
+3. src/api/auth.ts
+   - Extend auth API with key management functions
+   - setupApiKey() - Store encrypted API key
+   - getApiKeys() - Retrieve user's configured keys
+   - deleteApiKey() - Remove API key
+   - validateApiKey() - Test key functionality
+
+IMPLEMENTATION DETAILS:
+
+1. ApiKeySetup Component:
+   - shadcn/ui Form with Input components
+   - Real-time validation feedback
+   - Test connection button with loading states
+   - Key preview (last 4 characters only)
+   - Usage statistics display
+   - Error handling with toast notifications
+
+2. API Key Storage:
+   - Integration with Supabase user authentication
+   - Preparation for encryption (TASK_015)
+   - User-specific key association
+   - Metadata tracking (created_at, last_used, usage_count)
+
+3. Validation Flow:
+   - Format validation (YouTube API key pattern)
+   - Test API call to YouTube to verify functionality
+   - Quota limit detection
+   - Connection status feedback
+
+4. Settings Integration:
+   - Add "API Keys" tab to existing Settings page
+   - Consistent styling with current UI
+   - Help text and documentation links
+   - Onboarding guidance for new users
+
+5. Security Considerations:
+   - Keys never displayed in full after initial entry
+   - Preparation for encryption at rest
+   - User-specific access controls
+   - Audit trail for key operations
+
+SUPABASE INTEGRATION:
+
+1. Database Tables (prepared for TASK_012):
+   ```sql
+   user_api_keys:
+     - id (uuid, primary key)
+     - user_id (uuid, foreign key to auth.users)
+     - service (text: 'youtube' | 'openai')
+     - encrypted_key (text)
+     - key_preview (text, last 4 chars)
+     - description (text, optional)
+     - is_valid (boolean)
+     - created_at (timestamp)
+     - last_used (timestamp)
+     - usage_count (integer)
+   ```
+
+2. Row Level Security (RLS):
+   - Users can only access their own API keys
+   - Secure read/write policies
+   - Admin access for debugging (optional)
+
+3. API Functions:
+   - Encrypted storage using Supabase built-in encryption
+   - Proper error handling for database operations
+   - Type-safe operations with generated types
+
+VALIDATION CRITERIA:
+- ✓ YouTube API key can be entered and saved
+- ✓ Key validation works with test API calls
+- ✓ Invalid keys are rejected with clear error messages
+- ✓ Keys are associated with the correct user
+- ✓ Key preview shows only last 4 characters
+- ✓ Settings page integrates seamlessly
+- ✓ All UI components follow existing design patterns
+- ✓ Error handling provides useful feedback
+- ✓ Preparation for encryption is in place
+
+USER EXPERIENCE:
+1. Clear onboarding flow for API key setup
+2. Help text explaining where to get YouTube API key
+3. Visual feedback for validation status
+4. Usage statistics and quota monitoring preparation
+5. Easy key management (update, delete, regenerate)
+
+INTEGRATION NOTES:
+- This task prepares the foundation for YouTube API integration
+- Encryption will be added in TASK_015 without breaking changes
+- OpenAI API key support follows the same pattern
+- Component design allows for easy extension to other services 

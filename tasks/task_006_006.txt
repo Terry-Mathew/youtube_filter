@@ -1,0 +1,380 @@
+TASK_006_006: Add documentation and help text
+
+DESCRIPTION:
+Create help text, documentation links, and onboarding guidance for YouTube API key setup including step-by-step instructions and troubleshooting tips. This task enhances user experience with comprehensive guidance and support.
+
+DEPENDENCIES:
+- TASK_006_004 (Settings page integration) - Help text will be integrated into the Settings UI
+
+ANTICIPATES:
+- User onboarding and improved adoption rates
+- Reduced support requests for API key setup
+
+FILES TO MODIFY:
+1. src/components/ApiKeySetup.tsx
+   - Add help text and documentation links
+   - Include step-by-step setup guide
+   - Add troubleshooting tips
+   - Provide API key best practices
+
+2. src/components/ui/HelpTooltip.tsx
+   - Create reusable help tooltip component
+   - Add expandable help sections
+   - Include contextual help information
+
+IMPLEMENTATION DETAILS:
+
+1. Help Tooltip Component:
+   ```typescript
+   // src/components/ui/HelpTooltip.tsx
+   import { Button } from '@/components/ui/button';
+   import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+   import { HelpCircle, ExternalLink } from 'lucide-react';
+
+   interface HelpTooltipProps {
+     title: string;
+     content: React.ReactNode;
+     links?: {
+       text: string;
+       url: string;
+     }[];
+     trigger?: React.ReactNode;
+   }
+
+   export function HelpTooltip({ title, content, links, trigger }: HelpTooltipProps) {
+     return (
+       <Popover>
+         <PopoverTrigger asChild>
+           {trigger || (
+             <Button variant="ghost" size="sm" className="h-auto p-1">
+               <HelpCircle className="h-4 w-4" />
+               <span className="sr-only">Help</span>
+             </Button>
+           )}
+         </PopoverTrigger>
+         <PopoverContent className="w-80">
+           <div className="space-y-3">
+             <h4 className="font-medium">{title}</h4>
+             <div className="text-sm text-muted-foreground">{content}</div>
+             {links && links.length > 0 && (
+               <div className="space-y-2">
+                 {links.map((link, index) => (
+                   <a
+                     key={index}
+                     href={link.url}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
+                   >
+                     <ExternalLink className="h-3 w-3" />
+                     {link.text}
+                   </a>
+                 ))}
+               </div>
+             )}
+           </div>
+         </PopoverContent>
+       </Popover>
+     );
+   }
+   ```
+
+2. YouTube API Setup Documentation:
+   ```typescript
+   // In ApiKeySetup component
+   const youtubeHelpContent = (
+     <div className="space-y-3">
+       <div>
+         <h5 className="font-medium mb-2">How to get your YouTube Data API v3 key:</h5>
+         <ol className="list-decimal list-inside space-y-1 text-sm">
+           <li>Go to the Google Cloud Console</li>
+           <li>Create a new project or select an existing one</li>
+           <li>Enable the YouTube Data API v3</li>
+           <li>Create credentials (API key)</li>
+           <li>Copy your API key and paste it here</li>
+         </ol>
+       </div>
+       <div>
+         <h5 className="font-medium mb-2">Security Best Practices:</h5>
+         <ul className="list-disc list-inside space-y-1 text-sm">
+           <li>Restrict your API key to specific APIs</li>
+           <li>Set HTTP referrer restrictions if needed</li>
+           <li>Monitor your API usage regularly</li>
+           <li>Keep your API key confidential</li>
+         </ul>
+       </div>
+     </div>
+   );
+
+   const youtubeHelpLinks = [
+     {
+       text: "YouTube Data API v3 Documentation",
+       url: "https://developers.google.com/youtube/v3"
+     },
+     {
+       text: "Google Cloud Console",
+       url: "https://console.cloud.google.com/"
+     },
+     {
+       text: "API Key Best Practices",
+       url: "https://cloud.google.com/docs/authentication/api-keys"
+     }
+   ];
+   ```
+
+3. Integration into ApiKeySetup Component:
+   ```typescript
+   // In the main ApiKeySetup component
+   <Card>
+     <CardHeader>
+       <div className="flex items-center justify-between">
+         <div>
+           <CardTitle className="flex items-center gap-2">
+             YouTube Data API v3
+             <HelpTooltip
+               title="YouTube API Setup Help"
+               content={youtubeHelpContent}
+               links={youtubeHelpLinks}
+             />
+           </CardTitle>
+           <CardDescription>
+             Connect your YouTube Data API key to enable video search and analysis
+           </CardDescription>
+         </div>
+         {props.existingKey && (
+           <Badge variant={props.existingKey.isValid ? "default" : "destructive"}>
+             {props.existingKey.isValid ? "Connected" : "Invalid"}
+           </Badge>
+         )}
+       </div>
+     </CardHeader>
+     <CardContent className="space-y-4">
+       {/* API Key Form */}
+       <Form {...form}>
+         <form onSubmit={form.handleSubmit(handleSaveApiKey)} className="space-y-4">
+           <FormField
+             control={form.control}
+             name="apiKey"
+             render={({ field }) => (
+               <FormItem>
+                 <FormLabel className="flex items-center gap-2">
+                   API Key
+                   <HelpTooltip
+                     title="API Key Format"
+                     content={
+                       <div>
+                         <p>YouTube API keys should:</p>
+                         <ul className="list-disc list-inside mt-2 text-sm">
+                           <li>Start with "AIza"</li>
+                           <li>Be 39 characters long</li>
+                           <li>Contain only alphanumeric characters and hyphens</li>
+                         </ul>
+                       </div>
+                     }
+                   />
+                 </FormLabel>
+                 <FormControl>
+                   <Input
+                     {...field}
+                     type="password"
+                     placeholder="AIzaSyD..."
+                   />
+                 </FormControl>
+                 <FormMessage />
+               </FormItem>
+             )}
+           />
+           
+           {/* Quota Information Display */}
+           {quotaInfo && (
+             <Alert>
+               <Info className="h-4 w-4" />
+               <AlertTitle>API Quota Information</AlertTitle>
+               <AlertDescription>
+                 Daily quota: {quotaInfo.used.toLocaleString()} / {quotaInfo.dailyLimit.toLocaleString()} units used
+                 <br />
+                 Remaining: {(quotaInfo.dailyLimit - quotaInfo.used).toLocaleString()} units
+               </AlertDescription>
+             </Alert>
+           )}
+         </form>
+       </Form>
+     </CardContent>
+   </Card>
+   ```
+
+4. Troubleshooting Section:
+   ```typescript
+   const troubleshootingContent = (
+     <div className="space-y-4">
+       <div>
+         <h5 className="font-medium mb-2">Common Issues:</h5>
+         <div className="space-y-3">
+           <div>
+             <h6 className="font-medium text-sm">❌ "API key is invalid"</h6>
+             <p className="text-sm text-muted-foreground">
+               • Check that you copied the entire key
+               • Ensure the YouTube Data API v3 is enabled
+               • Verify the key isn't restricted
+             </p>
+           </div>
+           <div>
+             <h6 className="font-medium text-sm">❌ "Quota exceeded"</h6>
+             <p className="text-sm text-muted-foreground">
+               • Your daily quota has been reached
+               • Wait until the next day (resets at midnight PT)
+               • Consider requesting a quota increase
+             </p>
+           </div>
+           <div>
+             <h6 className="font-medium text-sm">❌ "API not enabled"</h6>
+             <p className="text-sm text-muted-foreground">
+               • Go to Google Cloud Console
+               • Navigate to APIs & Services > Library
+               • Search for "YouTube Data API v3" and enable it
+             </p>
+           </div>
+         </div>
+       </div>
+       
+       <div>
+         <h5 className="font-medium mb-2">Need More Help?</h5>
+         <p className="text-sm text-muted-foreground">
+           If you're still having issues, check our documentation or contact support.
+         </p>
+       </div>
+     </div>
+   );
+
+   // Add troubleshooting button to the component
+   <div className="flex items-center justify-between">
+     <div className="flex gap-2">
+       <Button type="submit" disabled={loadingState.saving}>
+         {loadingState.saving ? 'Saving...' : 'Save API Key'}
+       </Button>
+       <Button
+         type="button"
+         variant="outline"
+         onClick={() => handleTestApiKey(form.getValues('apiKey'))}
+         disabled={loadingState.testing}
+       >
+         {loadingState.testing ? 'Testing...' : 'Test Connection'}
+       </Button>
+     </div>
+     <HelpTooltip
+       title="Troubleshooting"
+       content={troubleshootingContent}
+       trigger={
+         <Button variant="ghost" size="sm">
+           <HelpCircle className="h-4 w-4 mr-2" />
+           Help
+         </Button>
+       }
+     />
+   </div>
+   ```
+
+5. Contextual Help Messages:
+   ```typescript
+   // Success state with next steps
+   {props.existingKey?.isValid && (
+     <Alert>
+       <CheckCircle className="h-4 w-4" />
+       <AlertTitle>API Key Connected Successfully</AlertTitle>
+       <AlertDescription>
+         Your YouTube API key is working correctly. You can now:
+         <ul className="list-disc list-inside mt-2 ml-4">
+           <li>Search for YouTube videos</li>
+           <li>Import video content for analysis</li>
+           <li>Access video metadata and statistics</li>
+         </ul>
+       </AlertDescription>
+     </Alert>
+   )}
+
+   // First-time setup guidance
+   {!props.existingKey && (
+     <Alert>
+       <Info className="h-4 w-4" />
+       <AlertTitle>First Time Setup</AlertTitle>
+       <AlertDescription>
+         Setting up your YouTube API key enables advanced features like video search and content analysis. 
+         The setup process takes about 5 minutes and requires a Google account.
+       </AlertDescription>
+     </Alert>
+   )}
+   ```
+
+6. Onboarding Flow:
+   ```typescript
+   // Step-by-step guide for new users
+   const [showSetupGuide, setShowSetupGuide] = useState(!props.existingKey);
+
+   {showSetupGuide && (
+     <Card className="border-blue-200 bg-blue-50/50">
+       <CardHeader>
+         <CardTitle className="text-blue-900">YouTube API Setup Guide</CardTitle>
+         <CardDescription className="text-blue-700">
+           Follow these steps to get your YouTube Data API v3 key
+         </CardDescription>
+       </CardHeader>
+       <CardContent>
+         <div className="space-y-4">
+           <div className="grid gap-4 md:grid-cols-2">
+             <div className="space-y-3">
+               <h5 className="font-medium">Step 1: Google Cloud Console</h5>
+               <p className="text-sm text-muted-foreground">
+                 Go to the Google Cloud Console and create a new project or select an existing one.
+               </p>
+               <Button variant="outline" size="sm" asChild>
+                 <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">
+                   Open Console <ExternalLink className="ml-2 h-3 w-3" />
+                 </a>
+               </Button>
+             </div>
+             <div className="space-y-3">
+               <h5 className="font-medium">Step 2: Enable API</h5>
+               <p className="text-sm text-muted-foreground">
+                 Navigate to APIs & Services and enable the YouTube Data API v3.
+               </p>
+               <Button variant="outline" size="sm" asChild>
+                 <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener noreferrer">
+                   Enable API <ExternalLink className="ml-2 h-3 w-3" />
+                 </a>
+               </Button>
+             </div>
+           </div>
+           <div className="flex justify-end">
+             <Button variant="ghost" size="sm" onClick={() => setShowSetupGuide(false)}>
+               I have my API key
+             </Button>
+           </div>
+         </div>
+       </CardContent>
+     </Card>
+   )}
+   ```
+
+VALIDATION CRITERIA:
+- ✓ Help tooltips provide comprehensive information
+- ✓ Step-by-step setup guide is clear and actionable
+- ✓ Troubleshooting section covers common issues
+- ✓ External links open correctly in new tabs
+- ✓ Contextual help appears at appropriate times
+- ✓ Documentation is accessible and well-organized
+- ✓ Onboarding flow guides new users effectively
+- ✓ Help content is mobile-friendly
+
+ACCESSIBILITY CONSIDERATIONS:
+- Screen reader compatible help content
+- Proper ARIA labels for help buttons
+- Keyboard navigation for help tooltips
+- High contrast for help text
+- Clear hierarchy in documentation
+
+INTEGRATION NOTES:
+- Help system is reusable for other API services
+- Documentation links are maintained and current
+- Help content scales with feature additions
+- Troubleshooting database for future enhancements
+- User feedback collection for documentation improvements 

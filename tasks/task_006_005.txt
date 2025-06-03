@@ -1,0 +1,356 @@
+TASK_006_005: Implement error handling and user feedback
+
+DESCRIPTION:
+Add comprehensive error handling with toast notifications, loading states, and user-friendly error messages for API key operations using shadcn/ui Toast and Alert components. This task ensures robust user experience during API key management.
+
+DEPENDENCIES:
+- TASK_006_003 (Supabase storage) - Error handling for storage operations
+
+ANTICIPATES:
+- TASK_020 (Comprehensive error handling) - Will integrate with global error system
+
+FILES TO MODIFY:
+1. src/components/ApiKeySetup.tsx
+   - Add comprehensive error handling
+   - Implement loading states
+   - Add user feedback mechanisms
+   - Handle network and validation errors
+
+2. src/lib/error-handler.ts
+   - Create centralized error handling utilities
+   - Define error types and messages
+   - Add logging and reporting functions
+
+IMPLEMENTATION DETAILS:
+
+1. Error Types and Messages:
+   ```typescript
+   export enum ApiKeyErrorType {
+     NETWORK_ERROR = 'NETWORK_ERROR',
+     VALIDATION_ERROR = 'VALIDATION_ERROR',
+     AUTHENTICATION_ERROR = 'AUTHENTICATION_ERROR',
+     QUOTA_ERROR = 'QUOTA_ERROR',
+     PERMISSION_ERROR = 'PERMISSION_ERROR',
+     STORAGE_ERROR = 'STORAGE_ERROR',
+     UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+   }
+
+   export const ApiKeyErrorMessages: Record<ApiKeyErrorType, string> = {
+     [ApiKeyErrorType.NETWORK_ERROR]: 'Network connection failed. Please check your internet connection.',
+     [ApiKeyErrorType.VALIDATION_ERROR]: 'API key format is invalid. Please check your key.',
+     [ApiKeyErrorType.AUTHENTICATION_ERROR]: 'Authentication failed. Please sign in again.',
+     [ApiKeyErrorType.QUOTA_ERROR]: 'API quota exceeded. Please try again later.',
+     [ApiKeyErrorType.PERMISSION_ERROR]: 'Insufficient permissions for this operation.',
+     [ApiKeyErrorType.STORAGE_ERROR]: 'Failed to save API key. Please try again.',
+     [ApiKeyErrorType.UNKNOWN_ERROR]: 'An unexpected error occurred. Please try again.',
+   };
+   ```
+
+2. Error Handler Service:
+   ```typescript
+   // src/lib/error-handler.ts
+   import { toast } from '@/components/ui/use-toast';
+
+   export interface ErrorContext {
+     operation: string;
+     service?: string;
+     userId?: string;
+     timestamp: Date;
+   }
+
+   export class ApiKeyErrorHandler {
+     static handleError(error: unknown, context: ErrorContext): void {
+       const errorInfo = this.parseError(error);
+       
+       // Log error for debugging
+       console.error(`API Key Error [${context.operation}]:`, {
+         error: errorInfo,
+         context,
+       });
+
+       // Show user-friendly message
+       this.showUserFeedback(errorInfo, context);
+
+       // Report to error tracking service (future enhancement)
+       this.reportError(errorInfo, context);
+     }
+
+     private static parseError(error: unknown): {
+       type: ApiKeyErrorType;
+       message: string;
+       originalError: unknown;
+     } {
+       if (error instanceof Error) {
+         if (error.message.includes('network') || error.message.includes('fetch')) {
+           return {
+             type: ApiKeyErrorType.NETWORK_ERROR,
+             message: ApiKeyErrorMessages[ApiKeyErrorType.NETWORK_ERROR],
+             originalError: error,
+           };
+         }
+         
+         if (error.message.includes('authentication') || error.message.includes('unauthorized')) {
+           return {
+             type: ApiKeyErrorType.AUTHENTICATION_ERROR,
+             message: ApiKeyErrorMessages[ApiKeyErrorType.AUTHENTICATION_ERROR],
+             originalError: error,
+           };
+         }
+
+         if (error.message.includes('quota') || error.message.includes('limit')) {
+           return {
+             type: ApiKeyErrorType.QUOTA_ERROR,
+             message: ApiKeyErrorMessages[ApiKeyErrorType.QUOTA_ERROR],
+             originalError: error,
+           };
+         }
+       }
+
+       return {
+         type: ApiKeyErrorType.UNKNOWN_ERROR,
+         message: ApiKeyErrorMessages[ApiKeyErrorType.UNKNOWN_ERROR],
+         originalError: error,
+       };
+     }
+
+     private static showUserFeedback(errorInfo: any, context: ErrorContext): void {
+       toast({
+         title: `${context.operation} Failed`,
+         description: errorInfo.message,
+         variant: "destructive",
+       });
+     }
+
+     private static reportError(errorInfo: any, context: ErrorContext): void {
+       // Future: Send to error tracking service
+       // Sentry, LogRocket, or custom error service
+     }
+   }
+   ```
+
+3. Loading State Management:
+   ```typescript
+   // In ApiKeySetup component
+   interface LoadingState {
+     saving: boolean;
+     testing: boolean;
+     deleting: boolean;
+     loading: boolean;
+   }
+
+   const [loadingState, setLoadingState] = useState<LoadingState>({
+     saving: false,
+     testing: false,
+     deleting: false,
+     loading: false,
+   });
+
+   const updateLoadingState = (operation: keyof LoadingState, loading: boolean) => {
+     setLoadingState(prev => ({ ...prev, [operation]: loading }));
+   };
+   ```
+
+4. Enhanced API Key Operations with Error Handling:
+   ```typescript
+   const handleSaveApiKey = async (formData: { apiKey: string; description?: string }) => {
+     updateLoadingState('saving', true);
+     
+     try {
+       // Validate format first
+       if (!validateApiKeyFormat(formData.apiKey)) {
+         throw new Error('Invalid API key format');
+       }
+
+       // Test connection before saving
+       const validationResult = await youtubeValidation.validateApiKey(formData.apiKey);
+       if (!validationResult.isValid) {
+         throw new Error(validationResult.error || 'API key validation failed');
+       }
+
+       // Save to database
+       const response = await authApi.setupApiKey({
+         service: props.service,
+         apiKey: formData.apiKey,
+         description: formData.description,
+       });
+
+       if (!response.success) {
+         throw new Error(response.error || 'Failed to save API key');
+       }
+
+       // Success feedback
+       toast({
+         title: "API Key Saved",
+         description: "Your API key has been saved successfully.",
+       });
+
+       // Update parent component
+       props.onSave?.(formData.apiKey);
+       
+       // Reset form
+       form.reset();
+
+     } catch (error) {
+       ApiKeyErrorHandler.handleError(error, {
+         operation: 'Save API Key',
+         service: props.service,
+         timestamp: new Date(),
+       });
+     } finally {
+       updateLoadingState('saving', false);
+     }
+   };
+
+   const handleTestApiKey = async (apiKey: string) => {
+     updateLoadingState('testing', true);
+     
+     try {
+       const isValid = await props.onTest?.(apiKey);
+       
+       if (isValid) {
+         toast({
+           title: "Connection Successful",
+           description: "Your API key is working correctly.",
+         });
+       } else {
+         throw new Error('API key test failed');
+       }
+     } catch (error) {
+       ApiKeyErrorHandler.handleError(error, {
+         operation: 'Test API Key',
+         service: props.service,
+         timestamp: new Date(),
+       });
+     } finally {
+       updateLoadingState('testing', false);
+     }
+   };
+
+   const handleDeleteApiKey = async () => {
+     updateLoadingState('deleting', true);
+     
+     try {
+       await props.onDelete?.();
+       
+       toast({
+         title: "API Key Deleted",
+         description: "Your API key has been removed successfully.",
+       });
+     } catch (error) {
+       ApiKeyErrorHandler.handleError(error, {
+         operation: 'Delete API Key',
+         service: props.service,
+         timestamp: new Date(),
+       });
+     } finally {
+       updateLoadingState('deleting', false);
+     }
+   };
+   ```
+
+5. User Feedback Components:
+   ```typescript
+   // Loading indicators
+   <Button 
+     type="submit" 
+     disabled={loadingState.saving || !form.formState.isValid}
+   >
+     {loadingState.saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+     {loadingState.saving ? 'Saving...' : 'Save API Key'}
+   </Button>
+
+   <Button 
+     variant="outline" 
+     onClick={() => handleTestApiKey(form.getValues('apiKey'))}
+     disabled={loadingState.testing || !form.getValues('apiKey')}
+   >
+     {loadingState.testing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+     {loadingState.testing ? 'Testing...' : 'Test Connection'}
+   </Button>
+
+   // Status indicators
+   {props.existingKey && (
+     <div className="flex items-center gap-2 text-sm">
+       <Badge variant={props.existingKey.isValid ? "default" : "destructive"}>
+         {props.existingKey.isValid ? "Connected" : "Invalid"}
+       </Badge>
+       <span className="text-muted-foreground">
+         Key ending in {props.existingKey.keyPreview}
+       </span>
+     </div>
+   )}
+
+   // Error alerts
+   {formError && (
+     <Alert variant="destructive">
+       <AlertCircle className="h-4 w-4" />
+       <AlertTitle>Error</AlertTitle>
+       <AlertDescription>{formError}</AlertDescription>
+     </Alert>
+   )}
+   ```
+
+6. Form Validation with Real-time Feedback:
+   ```typescript
+   const form = useForm<FormData>({
+     resolver: zodResolver(apiKeySchema),
+     mode: 'onChange', // Real-time validation
+   });
+
+   const apiKeySchema = z.object({
+     apiKey: z
+       .string()
+       .min(1, 'API key is required')
+       .refine(
+         (key) => validateApiKeyFormat(key),
+         'Invalid API key format'
+       ),
+     description: z.string().optional(),
+   });
+
+   // Real-time validation feedback
+   <FormField
+     control={form.control}
+     name="apiKey"
+     render={({ field, fieldState }) => (
+       <FormItem>
+         <FormLabel>API Key</FormLabel>
+         <FormControl>
+           <Input
+             {...field}
+             type="password"
+             placeholder="Enter your API key"
+             className={fieldState.error ? "border-destructive" : ""}
+           />
+         </FormControl>
+         <FormMessage />
+         {fieldState.error && (
+           <p className="text-sm text-destructive">{fieldState.error.message}</p>
+         )}
+       </FormItem>
+     )}
+   />
+   ```
+
+VALIDATION CRITERIA:
+- ✓ All error scenarios are handled gracefully
+- ✓ Loading states provide clear user feedback
+- ✓ Toast notifications appear for all operations
+- ✓ Form validation works in real-time
+- ✓ Error messages are user-friendly and actionable
+- ✓ Network errors are handled properly
+- ✓ Authentication errors trigger appropriate responses
+- ✓ Success states provide positive feedback
+
+ACCESSIBILITY CONSIDERATIONS:
+- Screen reader announcements for status changes
+- Proper ARIA labels for loading states
+- Error messages are properly associated with form fields
+- Focus management during operations
+
+INTEGRATION NOTES:
+- Error handling integrates with global error management
+- Toast notifications use consistent styling
+- Loading states prevent duplicate operations
+- Error tracking prepared for future analytics
+- User feedback follows established UX patterns 

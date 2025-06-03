@@ -1,0 +1,196 @@
+# TASK_007_004: Create category-based video filtering
+
+## Objective
+Implement video filtering by YouTube categories, duration, upload date, and custom category mapping for Learning Tube's category system integration.
+
+## Requirements
+
+### YouTube Category Integration
+- Map YouTube's predefined categories to Learning Tube categories
+- Implement category-based search filtering
+- Support multiple category selection
+- Educational content categorization priority
+- Custom category creation for specific learning paths
+
+### Advanced Filtering System
+- Duration-based filtering (short: <4min, medium: 4-20min, long: >20min)
+- Upload date filtering (last hour, day, week, month, year)
+- Channel-based filtering for educational content creators
+- View count and engagement filtering
+- Language and region-based filtering
+- Content quality indicators (HD, captions available)
+
+### Learning Tube Category Mapping
+- Science & Technology → YouTube categories 28, 26
+- Education → YouTube category 27
+- How-to & Style → YouTube category 26
+- Entertainment → YouTube category 24
+- Custom subject-specific categories (Math, Physics, Programming, etc.)
+- Dynamic category suggestions based on content analysis
+
+## Technical Implementation
+
+### Category Filtering Service
+```typescript
+// src/lib/youtube-api.ts (extending YouTubeApiClient)
+export interface CategoryFilter {
+  learningTubeCategories: string[];
+  youtubeCategoryIds: string[];
+  duration?: 'short' | 'medium' | 'long' | 'any';
+  uploadTime?: 'hour' | 'today' | 'week' | 'month' | 'year' | 'any';
+  definition?: 'high' | 'standard' | 'any';
+  caption?: 'closedCaption' | 'any';
+  minViewCount?: number;
+  maxViewCount?: number;
+  channelType?: 'educational' | 'verified' | 'any';
+  language?: string;
+  region?: string;
+}
+
+export interface CategoryMapping {
+  learningTubeCategory: string;
+  youtubeCategoryIds: string[];
+  keywords: string[];
+  priority: number;
+  description: string;
+}
+
+export class YouTubeCategoryFilter {
+  // Filter videos by Learning Tube categories
+  async filterByLearningTubeCategory(
+    searchResults: YouTubeVideo[],
+    categoryFilter: CategoryFilter
+  ): Promise<YouTubeVideo[]>
+  
+  // Map YouTube categories to Learning Tube categories
+  static mapYouTubeCategoryToLearningTube(youtubeCategoryId: string): string[]
+  
+  // Get category-specific search suggestions
+  async getCategorySearchSuggestions(category: string): Promise<string[]>
+  
+  // Filter videos by educational content indicators
+  async filterEducationalContent(videos: YouTubeVideo[]): Promise<YouTubeVideo[]>
+  
+  // Apply multiple filters efficiently
+  async applyAdvancedFilters(
+    videos: YouTubeVideo[],
+    filters: CategoryFilter
+  ): Promise<FilteredVideoResult>
+}
+```
+
+### Category Configuration
+```typescript
+// src/lib/category-mappings.ts
+export const LEARNING_TUBE_CATEGORIES: CategoryMapping[] = [
+  {
+    learningTubeCategory: 'Science & Technology',
+    youtubeCategoryIds: ['28', '26'],
+    keywords: ['science', 'technology', 'engineering', 'research', 'innovation'],
+    priority: 1,
+    description: 'Scientific and technological educational content'
+  },
+  {
+    learningTubeCategory: 'Mathematics',
+    youtubeCategoryIds: ['27', '28'],
+    keywords: ['math', 'mathematics', 'algebra', 'calculus', 'geometry'],
+    priority: 1,
+    description: 'Mathematical concepts and problem solving'
+  },
+  {
+    learningTubeCategory: 'Programming',
+    youtubeCategoryIds: ['28', '26'],
+    keywords: ['programming', 'coding', 'software', 'development', 'tutorial'],
+    priority: 1,
+    description: 'Programming languages and software development'
+  }
+  // Additional categories...
+];
+
+export const EDUCATIONAL_CHANNELS = [
+  'UC2C_jShtL725hvbm1arSV9w', // CGP Grey
+  'UCP46_MXP_WG_auH88FnfS1A', // Bill Nye
+  'UCsooa4yRKGN_zEE8iknghZA', // TED-Ed
+  // Additional verified educational channels...
+];
+```
+
+### Integration with Learning Tube Store
+```typescript
+// src/api/videos.ts
+export class VideoApiService {
+  // Search videos with Learning Tube category integration
+  async searchVideosByCategory(
+    categoryId: string,
+    searchQuery?: string,
+    filters?: CategoryFilter
+  ): Promise<SearchResult<YouTubeVideo>>
+  
+  // Get recommended videos for user's selected categories
+  async getRecommendedVideos(
+    userCategories: string[],
+    limit?: number
+  ): Promise<YouTubeVideo[]>
+  
+  // Update user's category preferences
+  async updateCategoryPreferences(
+    userId: string,
+    categories: string[]
+  ): Promise<void>
+  
+  // Get category-specific video statistics
+  async getCategoryVideoStats(categoryId: string): Promise<CategoryStats>
+}
+```
+
+## Acceptance Criteria
+
+### Functional Requirements
+- [ ] YouTube categories correctly map to Learning Tube categories
+- [ ] Duration and date filtering work accurately
+- [ ] Educational content prioritization functions properly
+- [ ] Multiple filter combinations work seamlessly
+- [ ] Category suggestions are relevant and helpful
+
+### Technical Requirements
+- [ ] Efficient filtering algorithms with minimal performance impact
+- [ ] Proper integration with existing search functionality
+- [ ] Category mappings are maintainable and extensible
+- [ ] Error handling for invalid category selections
+- [ ] Type safety for all filtering operations
+
+### Integration Requirements
+- [ ] Seamless integration with Learning Tube category system
+- [ ] Compatible with existing Zustand store structure
+- [ ] Works with current VideoCard display components
+- [ ] Integrates with user preference storage
+
+## Dependencies
+- TASK_007_002: YouTube search functionality
+- TASK_002: Zustand store with category management
+- Learning Tube category definitions
+
+## Files to Create/Modify
+- `src/lib/youtube-api.ts` - Category filtering methods
+- `src/api/videos.ts` - Supabase integration for categories
+- `src/lib/category-mappings.ts` - Category configuration
+- `src/types/youtube.ts` - Category-related types
+
+## Testing Requirements
+- Unit tests for category mapping functions
+- Integration tests with YouTube category API
+- Filter combination testing
+- Performance tests for large video sets
+- Category preference persistence testing
+
+## Performance Considerations
+- Efficient category filtering algorithms
+- Cached category mappings
+- Optimized database queries for category data
+- Minimal API calls for category-based searches
+
+## Documentation Requirements
+- Document category mapping strategy
+- Provide filtering examples and use cases
+- Document category preference system
+- Include performance optimization guidelines 

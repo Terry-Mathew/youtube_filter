@@ -1,0 +1,89 @@
+TASK_005: Set up Supabase API client foundation
+
+DESCRIPTION:
+Create Supabase client configuration and API call skeletons for categories, videos, and authentication using supabase-js in Vite + React environment. This task establishes the foundation for all backend operations using Supabase as the primary database and authentication provider.
+
+ARCHITECTURE CHANGE:
+- FROM: Next.js API routes (pages/api/categories/index.ts, pages/api/videos/index.ts, pages/api/auth/index.ts)
+- TO: Vite + Supabase client (src/lib/supabase.ts, src/api/categories.ts, src/api/videos.ts, src/api/auth.ts)
+
+DEPENDENCIES:
+- TASK_001 (TypeScript interfaces) - Required for type definitions
+
+ANTICIPATES:
+- TASK_012 (Supabase database setup) - Database schema and types will be generated
+- TASK_013 (Supabase authentication) - Auth implementation will use this foundation
+
+FILES TO MODIFY:
+1. src/lib/supabase.ts
+   - Create Supabase client instance with proper configuration
+   - Environment variable setup (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+   - SupabaseService wrapper class with utility methods
+   - TypeScript integration with generated types
+
+2. src/api/categories.ts
+   - Categories API service class with CRUD operations
+   - Pagination and filtering support
+   - Category settings management
+   - Integration points for TASK_012 database operations
+
+3. src/api/videos.ts
+   - Videos API service class
+   - YouTube search skeleton (integration point for TASK_007)
+   - Transcript extraction skeleton (integration point for TASK_009)
+   - AI analysis skeleton (integration point for TASK_010)
+   - Video caching and management
+
+4. src/api/auth.ts
+   - Authentication API service
+   - User signup, signin, signout flows
+   - OAuth providers (Google, GitHub, Discord, Twitter)
+   - Profile management
+   - API key management skeleton (integration point for TASK_015)
+
+5. src/types/supabase.ts
+   - Placeholder Database interface (will be auto-generated in TASK_012)
+   - Helper types for database operations
+   - Type-safe table definitions
+
+IMPLEMENTATION DETAILS:
+
+1. Supabase Client Setup:
+   - Configure PKCE flow for enhanced security
+   - Set up session persistence with localStorage
+   - Implement proper error handling
+   - Add TypeScript support with generated types
+
+2. API Layer Structure:
+   - Singleton pattern for service classes
+   - Consistent error handling and response format
+   - Authentication checks for all operations
+   - Placeholder implementations marked for future tasks
+
+3. Type Safety:
+   - Branded types for IDs (CategoryId, VideoId, UserId)
+   - Strict TypeScript interfaces
+   - ApiResponse wrapper for consistent responses
+   - Database type integration points
+
+4. Security Considerations:
+   - Row Level Security (RLS) preparation
+   - Proper authentication flows
+   - Environment variable validation
+   - Secure API key handling preparation
+
+VALIDATION CRITERIA:
+- ✓ Supabase client connects successfully
+- ✓ All API service classes instantiate without errors
+- ✓ TypeScript compilation passes with strict mode
+- ✓ Environment variables are properly validated
+- ✓ Authentication state management works
+- ✓ Placeholder database operations return expected types
+- ✓ Integration points are clearly marked for future tasks
+
+INTEGRATION NOTES:
+- This task provides the foundation for all backend operations
+- Database schema will be implemented in TASK_012
+- Authentication flows will be completed in TASK_013
+- API key management will be secured in TASK_015
+- All placeholder functions contain TODO comments for easy identification 

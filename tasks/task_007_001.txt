@@ -1,0 +1,126 @@
+# TASK_007_001: Create YouTube API client service foundation
+
+## Objective
+Build core YouTube Data API v3 client with authentication, error handling, and quota management using user-provided API keys from Supabase storage.
+
+## Requirements
+
+### Core YouTube API Client
+- Create TypeScript class `YouTubeApiClient` in `src/lib/youtube-api.ts`
+- Implement API key authentication using keys from Supabase
+- Support all major YouTube Data API v3 endpoints
+- Include proper TypeScript interfaces for API responses
+- Implement request/response logging for debugging
+
+### API Key Management Integration
+- Retrieve API keys securely from Supabase storage
+- Handle multiple API keys per user for redundancy
+- Validate API keys before making requests
+- Automatic key rotation on quota exhaustion
+
+### Base Configuration
+- API base URL: `https://www.googleapis.com/youtube/v3`
+- Default request parameters (part, maxResults, etc.)
+- Request headers and user agent configuration
+- Timeout handling and connection management
+
+### TypeScript Interfaces
+Create comprehensive type definitions in `src/types/youtube.ts`:
+- YouTube API response structures
+- Search parameters and filters
+- Video, channel, and playlist resource types
+- Error response formats
+- Quota usage tracking types
+
+## Technical Implementation
+
+### YouTube API Client Structure
+```typescript
+// src/lib/youtube-api.ts
+export class YouTubeApiClient {
+  private apiKey: string;
+  private baseUrl: string = 'https://www.googleapis.com/youtube/v3';
+  
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+  
+  // Core request method with error handling
+  private async makeRequest<T>(endpoint: string, params: Record<string, any>): Promise<T>
+  
+  // Validate API key
+  async validateApiKey(): Promise<boolean>
+  
+  // Get quota usage information
+  async getQuotaUsage(): Promise<QuotaInfo>
+}
+```
+
+### Error Handling Framework
+- Custom error classes for different API failure types
+- Retry logic for transient failures
+- Quota exceeded handling with user notifications
+- Network timeout and connection error handling
+
+### Integration Points
+- Supabase client for API key retrieval
+- Error handler integration from TASK_006_005
+- Zustand store integration for state management
+- Toast notifications for user feedback
+
+## Acceptance Criteria
+
+### Functional Requirements
+- [ ] YouTube API client successfully authenticates with user API keys
+- [ ] All major API endpoints are accessible through the client
+- [ ] Error handling covers all common failure scenarios
+- [ ] API key validation works correctly
+- [ ] Quota tracking provides accurate usage information
+
+### Technical Requirements
+- [ ] Follows Vite + Supabase architecture patterns
+- [ ] Comprehensive TypeScript typing for all API responses
+- [ ] Proper separation of concerns between API client and business logic
+- [ ] Integration with existing error handling system
+- [ ] Performance optimized with request caching
+
+### Integration Requirements
+- [ ] Seamless integration with Supabase API key storage
+- [ ] Compatible with existing authentication flow
+- [ ] Proper error propagation to UI components
+- [ ] State management integration through Zustand
+
+## Dependencies
+- TASK_006: YouTube API key management (for API key retrieval)
+- Supabase client setup
+- Error handling framework from TASK_006_005
+
+## Files to Create/Modify
+- `src/lib/youtube-api.ts` - Main API client implementation
+- `src/types/youtube.ts` - TypeScript interface definitions
+- `src/lib/youtube-config.ts` - Configuration constants and defaults
+
+## Testing Requirements
+- Unit tests for API client methods
+- Integration tests with YouTube API (using test keys)
+- Error handling scenario testing
+- API key validation testing
+- Quota tracking accuracy testing
+
+## Performance Considerations
+- Request caching to reduce API calls
+- Efficient error handling to prevent cascading failures
+- Memory management for large API responses
+- Connection pooling for multiple requests
+
+## Security Requirements
+- Secure API key handling (no logging of keys)
+- Proper error messages without exposing sensitive data
+- Rate limiting to prevent abuse
+- Input validation for all API parameters
+
+## Documentation Requirements
+- JSDoc comments for all public methods
+- Usage examples and integration patterns
+- Error handling guidelines
+- Performance optimization recommendations 

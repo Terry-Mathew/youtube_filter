@@ -1,0 +1,250 @@
+TASK_006_004: Add API key management to Settings page
+
+DESCRIPTION:
+Integrate ApiKeySetup component into existing Settings page with proper navigation, responsive layout, and consistent styling using shadcn/ui Tabs and Card components. This task creates the user interface for accessing API key management.
+
+DEPENDENCIES:
+- TASK_006_001 (ApiKeySetup component) - Component must be created first
+
+ANTICIPATES:
+- TASK_006_005 (Error handling) - Will enhance user feedback
+- TASK_006_006 (Documentation) - Will add help text and guidance
+
+FILES TO MODIFY:
+1. src/pages/Settings.tsx
+   - Add API Keys tab to existing Settings navigation
+   - Integrate ApiKeySetup component
+   - Maintain consistent styling and layout
+   - Add responsive design considerations
+
+IMPLEMENTATION DETAILS:
+
+1. Settings Page Structure Enhancement:
+   ```typescript
+   // Add to existing Settings page tabs
+   const settingsTabs = [
+     { id: 'general', label: 'General', icon: Settings },
+     { id: 'categories', label: 'Categories', icon: Tags },
+     { id: 'api-keys', label: 'API Keys', icon: Key }, // New tab
+     { id: 'preferences', label: 'Preferences', icon: User },
+   ];
+   ```
+
+2. API Keys Tab Implementation:
+   ```typescript
+   import { ApiKeySetup } from '@/components/ApiKeySetup';
+   import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+   import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+   import { Alert, AlertDescription } from '@/components/ui/alert';
+   import { InfoIcon } from 'lucide-react';
+
+   // In Settings component
+   <TabsContent value="api-keys" className="space-y-6">
+     <div className="space-y-4">
+       <div>
+         <h3 className="text-lg font-medium">API Keys</h3>
+         <p className="text-sm text-muted-foreground">
+           Manage your external service API keys for enhanced functionality.
+         </p>
+       </div>
+
+       <Alert>
+         <InfoIcon className="h-4 w-4" />
+         <AlertDescription>
+           API keys are encrypted and stored securely. They're only used to fetch content and analyze videos.
+         </AlertDescription>
+       </Alert>
+
+       <div className="grid gap-6">
+         <ApiKeySetup 
+           service="youtube"
+           onSave={handleYouTubeKeySave}
+           onDelete={handleYouTubeKeyDelete}
+           onTest={handleYouTubeKeyTest}
+           existingKey={youtubeApiKey}
+         />
+         
+         <ApiKeySetup 
+           service="openai"
+           onSave={handleOpenAIKeySave}
+           onDelete={handleOpenAIKeyDelete}
+           onTest={handleOpenAIKeyTest}
+           existingKey={openaiApiKey}
+         />
+       </div>
+     </div>
+   </TabsContent>
+   ```
+
+3. State Management Integration:
+   ```typescript
+   // Add to Settings component state
+   const [apiKeys, setApiKeys] = useState<Record<string, ApiKeyInfo | null>>({
+     youtube: null,
+     openai: null,
+   });
+   const [isLoading, setIsLoading] = useState(false);
+
+   // Load existing API keys on mount
+   useEffect(() => {
+     loadApiKeys();
+   }, []);
+
+   const loadApiKeys = async () => {
+     setIsLoading(true);
+     try {
+       const response = await authApi.getApiKeys();
+       if (response.success) {
+         const keyMap = response.data.reduce((acc, key) => {
+           acc[key.service] = key;
+           return acc;
+         }, {} as Record<string, ApiKeyInfo>);
+         setApiKeys(keyMap);
+       }
+     } catch (error) {
+       console.error('Failed to load API keys:', error);
+     } finally {
+       setIsLoading(false);
+     }
+   };
+   ```
+
+4. Event Handlers:
+   ```typescript
+   const handleYouTubeKeySave = async (key: string) => {
+     try {
+       const response = await authApi.setupApiKey({
+         service: 'youtube',
+         apiKey: key,
+         description: 'YouTube Data API v3 Key',
+       });
+       
+       if (response.success) {
+         setApiKeys(prev => ({ ...prev, youtube: response.data }));
+         toast.success('YouTube API key saved successfully');
+       } else {
+         toast.error(response.error || 'Failed to save API key');
+       }
+     } catch (error) {
+       toast.error('An error occurred while saving the API key');
+     }
+   };
+
+   const handleYouTubeKeyDelete = async () => {
+     if (!apiKeys.youtube) return;
+     
+     try {
+       const response = await authApi.deleteApiKey(apiKeys.youtube.id);
+       if (response.success) {
+         setApiKeys(prev => ({ ...prev, youtube: null }));
+         toast.success('YouTube API key deleted successfully');
+       } else {
+         toast.error(response.error || 'Failed to delete API key');
+       }
+     } catch (error) {
+       toast.error('An error occurred while deleting the API key');
+     }
+   };
+
+   const handleYouTubeKeyTest = async (key: string): Promise<boolean> => {
+     try {
+       const validation = await youtubeValidation.validateApiKey(key);
+       if (validation.isValid) {
+         toast.success('YouTube API key is valid and working');
+         return true;
+       } else {
+         toast.error(validation.error || 'API key validation failed');
+         return false;
+       }
+     } catch (error) {
+       toast.error('Failed to test API key');
+       return false;
+     }
+   };
+   ```
+
+5. Responsive Layout:
+   ```typescript
+   // Responsive grid for API key cards
+   <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-1">
+     {/* API key components */}
+   </div>
+
+   // Mobile-friendly tab navigation
+   <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
+     {settingsTabs.map((tab) => (
+       <TabsTrigger 
+         key={tab.id} 
+         value={tab.id}
+         className="flex items-center gap-2"
+       >
+         <tab.icon className="h-4 w-4" />
+         <span className="hidden sm:inline">{tab.label}</span>
+       </TabsTrigger>
+     ))}
+   </TabsList>
+   ```
+
+6. Loading States:
+   ```typescript
+   {isLoading ? (
+     <div className="space-y-4">
+       <div className="h-32 bg-muted animate-pulse rounded-lg" />
+       <div className="h-32 bg-muted animate-pulse rounded-lg" />
+     </div>
+   ) : (
+     <div className="grid gap-6">
+       {/* API key components */}
+     </div>
+   )}
+   ```
+
+NAVIGATION INTEGRATION:
+
+1. Tab Navigation:
+   - Add API Keys tab to existing tab structure
+   - Maintain consistent icon and styling
+   - Ensure proper tab state management
+
+2. Breadcrumb Integration:
+   - Update breadcrumb navigation if present
+   - Add proper page title and description
+
+3. Mobile Navigation:
+   - Ensure tabs work on mobile devices
+   - Responsive tab labels and icons
+
+STYLING CONSISTENCY:
+
+1. Design System Alignment:
+   - Use existing color scheme and typography
+   - Maintain consistent spacing and layout
+   - Follow existing component patterns
+
+2. Component Integration:
+   - Consistent card styling with other settings sections
+   - Proper form layout and spacing
+   - Aligned button styling and placement
+
+VALIDATION CRITERIA:
+- ✓ API Keys tab appears in Settings navigation
+- ✓ ApiKeySetup component renders properly
+- ✓ Tab navigation works correctly
+- ✓ Responsive layout works on all screen sizes
+- ✓ Loading states display appropriately
+- ✓ Error handling provides user feedback
+- ✓ Styling is consistent with existing Settings page
+- ✓ State management works correctly
+
+ACCESSIBILITY CONSIDERATIONS:
+- Proper ARIA labels for tabs and buttons
+- Keyboard navigation support
+- Screen reader compatibility
+- Focus management between tabs
+
+INTEGRATION NOTES:
+- Maintains existing Settings page structure
+- Prepared for additional API services (OpenAI)
+- Error handling integrates with global toast system
+- Loading states provide good user experience
+- Mobile-first responsive design approach 

@@ -1,0 +1,614 @@
+{
+  "project": "YouTube Filter (Learning Tube Evolution)",
+  "created": "2024-12-19",
+  "updated": "2024-12-19",
+  "architecture": "Vite + React + TypeScript + Supabase + Zustand + shadcn/ui",
+  "tasks": [
+    {
+      "id": "TASK_001",
+      "title": "Define TypeScript interfaces for Category and Video data models",
+      "description": "Extend existing types to include Category, CategorySettings, VideoAnalysis, and ApiUsage interfaces",
+      "status": "Completed",
+      "priority": "High",
+      "dependencies": [],
+      "complexity": 3,
+      "phase": "Foundation",
+      "component_integration": "src/types/index.ts",
+      "files_to_modify": ["src/types/index.ts"],
+      "task_file": "tasks/task_001.txt"
+    },
+    {
+      "id": "TASK_002", 
+      "title": "Extend Zustand store with category management",
+      "description": "Add category state, actions for CRUD operations, and category selection to existing store",
+      "status": "Completed",
+      "priority": "High",
+      "dependencies": ["TASK_001"],
+      "complexity": 5,
+      "phase": "Foundation",
+      "component_integration": "src/store/index.ts",
+      "files_to_modify": ["src/store/index.ts"],
+      "task_file": "tasks/task_002.txt",
+      "subtasks": [
+        {
+          "id": "TASK_002_001",
+          "title": "Setup category state structure in Zustand store",
+          "description": "Define category state interface and initialize empty categories state with proper TypeScript typing",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_001"],
+          "complexity": 2,
+          "files_to_modify": ["src/store/index.ts"],
+          "task_file": "tasks/task_002_001.txt"
+        },
+        {
+          "id": "TASK_002_002", 
+          "title": "Implement category CRUD operations",
+          "description": "Add create, read, update, delete actions for categories with proper state management and validation",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_002_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/store/index.ts"],
+          "task_file": "tasks/task_002_002.txt"
+        },
+        {
+          "id": "TASK_002_003",
+          "title": "Add category selection and filtering logic",
+          "description": "Implement active category selection, multi-category filtering, and category-based video filtering",
+          "status": "Completed", 
+          "priority": "High",
+          "dependencies": ["TASK_002_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/store/index.ts"],
+          "task_file": "tasks/task_002_003.txt"
+        },
+        {
+          "id": "TASK_002_004",
+          "title": "Add category persistence with localStorage",
+          "description": "Implement localStorage persistence for categories with proper serialization and hydration",
+          "status": "Completed",
+          "priority": "Medium", 
+          "dependencies": ["TASK_002_002"],
+          "complexity": 2,
+          "files_to_modify": ["src/store/index.ts"],
+          "task_file": "tasks/task_002_004.txt"
+        },
+        {
+          "id": "TASK_002_005",
+          "title": "Add category search and sorting functionality",
+          "description": "Implement category search, sorting by various criteria, and category organization features",
+          "status": "Completed",
+          "priority": "Low",
+          "dependencies": ["TASK_002_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/store/index.ts"],
+          "task_file": "tasks/task_002_005.txt"
+        }
+      ]
+    },
+    {
+      "id": "TASK_003",
+      "title": "Create CategoryManager UI component",
+      "description": "Build category creation, editing, and deletion interface using existing UI patterns",
+      "status": "Not Started", 
+      "priority": "High",
+      "dependencies": ["TASK_002"],
+      "complexity": 6,
+      "phase": "Foundation",
+      "component_integration": "components/ui/CategoryManager.tsx",
+      "files_to_modify": ["src/components/CategoryManager.tsx", "src/pages/Settings.tsx"],
+      "task_file": "tasks/task_003.txt",
+      "subtasks": [
+        {
+          "id": "TASK_003_001",
+          "title": "Create CategoryForm component with shadcn UI",
+          "description": "Build reusable form component for creating/editing categories using shadcn/ui Dialog, Form, Input, and Button components with proper validation",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_002"],
+          "complexity": 4,
+          "files_to_modify": ["src/components/ui/CategoryForm.tsx"],
+          "task_file": "tasks/task_003_001.txt"
+        },
+        {
+          "id": "TASK_003_002",
+          "title": "Build CategoryListItem component with actions",
+          "description": "Create individual category display component with edit/delete actions, usage stats, and responsive design using shadcn/ui Card and Button components",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_003_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/ui/CategoryListItem.tsx"],
+          "task_file": "tasks/task_003_002.txt"
+        },
+        {
+          "id": "TASK_003_003",
+          "title": "Implement CategoryManager main component",
+          "description": "Build main CategoryManager component that orchestrates category listing, search, and CRUD operations with proper state management",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_003_002"],
+          "complexity": 5,
+          "files_to_modify": ["src/components/CategoryManager.tsx"],
+          "task_file": "tasks/task_003_003.txt"
+        },
+        {
+          "id": "TASK_003_004",
+          "title": "Create KeywordInput component for category tags",
+          "description": "Build tag-based input component for category keywords using shadcn/ui Input and Badge components with add/remove functionality",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_003_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/ui/KeywordInput.tsx"],
+          "task_file": "tasks/task_003_004.txt"
+        },
+        {
+          "id": "TASK_003_005",
+          "title": "Integrate CategoryManager into Settings page",
+          "description": "Add CategoryManager to existing Settings page with proper navigation, responsive layout, and consistent styling",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_003_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/pages/Settings.tsx"],
+          "task_file": "tasks/task_003_005.txt"
+        },
+        {
+          "id": "TASK_003_006",
+          "title": "Add confirmation dialogs and error handling",
+          "description": "Implement AlertDialog components for delete confirmations and comprehensive error handling with toast notifications",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_003_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/components/CategoryManager.tsx", "src/components/ui/CategoryForm.tsx"],
+          "task_file": "tasks/task_003_006.txt"
+        }
+      ]
+    },
+    {
+      "id": "TASK_004",
+      "title": "Create CategorySelector component for main navigation",
+      "description": "Add category switching interface to header, integrating with existing navigation",
+      "status": "Completed",
+      "priority": "High", 
+      "dependencies": ["TASK_002"],
+      "complexity": 4,
+      "phase": "Foundation",
+      "component_integration": "components/ui/CategorySelector.tsx",
+      "files_to_modify": ["src/components/CategorySelector.tsx", "src/components/Header.tsx"],
+      "task_file": "tasks/task_004.txt"
+    },
+    {
+      "id": "TASK_005",
+      "title": "Set up Supabase API client foundation",
+      "description": "Create Supabase client configuration and API call skeletons for categories, videos, and authentication using supabase-js in Vite + React environment",
+      "status": "Completed",
+      "priority": "High",
+      "dependencies": ["TASK_001"],
+      "complexity": 4,
+      "phase": "API Integration",
+      "component_integration": "Backend API foundation",
+      "files_to_modify": ["src/lib/supabase.ts", "src/api/categories.ts", "src/api/videos.ts", "src/api/auth.ts", "src/types/supabase.ts"],
+      "task_file": "tasks/task_005.txt"
+    },
+    {
+      "id": "TASK_006",
+      "title": "Create YouTube API key management in Settings",
+      "description": "Add API key input, validation, and secure storage to existing Settings page using Supabase for storage",
+      "status": "Not Started",
+      "priority": "High",
+      "dependencies": ["TASK_005", "TASK_012"],
+      "complexity": 7,
+      "phase": "API Integration", 
+      "component_integration": "src/pages/Settings.tsx",
+      "files_to_modify": ["src/pages/Settings.tsx", "src/components/ApiKeySetup.tsx", "src/api/auth.ts"],
+      "task_file": "tasks/task_006.txt"
+    },
+    {
+      "id": "TASK_007",
+      "title": "Implement YouTube Data API v3 integration",
+      "description": "Create client-side service for fetching videos using user-provided API keys through Supabase client",
+      "status": "Not Started",
+      "priority": "High", 
+      "dependencies": ["TASK_006"],
+      "complexity": 8,
+      "phase": "API Integration",
+      "component_integration": "Backend service + existing VideoCard display",
+      "files_to_modify": ["src/lib/youtube-api.ts", "src/api/videos.ts"],
+      "task_file": "tasks/task_007.txt",
+      "subtasks": [
+        {
+          "id": "TASK_007_001",
+          "title": "Create YouTube API client service foundation",
+          "description": "Build core YouTube Data API v3 client with authentication, error handling, and quota management using user-provided API keys from Supabase storage",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_006"],
+          "complexity": 6,
+          "files_to_modify": ["src/lib/youtube-api.ts", "src/types/youtube.ts"],
+          "task_file": "tasks/task_007_001.txt"
+        },
+        {
+          "id": "TASK_007_002",
+          "title": "Implement YouTube search functionality",
+          "description": "Create search service for videos, channels, and playlists with pagination, filtering, and proper parameter handling using YouTube Data API v3 search endpoint",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_007_001"],
+          "complexity": 5,
+          "files_to_modify": ["src/lib/youtube-api.ts", "src/types/youtube.ts"],
+          "task_file": "tasks/task_007_002.txt"
+        },
+        {
+          "id": "TASK_007_003",
+          "title": "Build video details and statistics fetching",
+          "description": "Implement video metadata retrieval including statistics, content details, and snippet information with proper data mapping and caching strategies",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_007_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/youtube-api.ts", "src/types/youtube.ts"],
+          "task_file": "tasks/task_007_003.txt"
+        },
+        {
+          "id": "TASK_007_004", 
+          "title": "Create category-based video filtering",
+          "description": "Implement video filtering by YouTube categories, duration, upload date, and custom category mapping for Learning Tube's category system integration",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_007_002", "TASK_002"],
+          "complexity": 5,
+          "files_to_modify": ["src/lib/youtube-api.ts", "src/api/videos.ts"],
+          "task_file": "tasks/task_007_004.txt"
+        },
+        {
+          "id": "TASK_007_005",
+          "title": "Integrate YouTube API with Supabase storage",
+          "description": "Connect YouTube API service with Supabase for video caching, user preferences, and API usage tracking with proper data synchronization and conflict resolution",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_007_003", "TASK_005"],
+          "complexity": 6,
+          "files_to_modify": ["src/api/videos.ts", "src/lib/youtube-api.ts"],
+          "task_file": "tasks/task_007_005.txt"
+        },
+        {
+          "id": "TASK_007_006",
+          "title": "Implement quota management and rate limiting",
+          "description": "Add intelligent quota usage tracking, rate limiting, and cost optimization strategies to prevent API quota exhaustion and provide user feedback on usage",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_007_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/youtube-api.ts", "src/lib/quota-manager.ts"],
+          "task_file": "tasks/task_007_006.txt"
+        },
+        {
+          "id": "TASK_007_007",
+          "title": "Add comprehensive error handling and retry logic",
+          "description": "Implement robust error handling for API failures, network issues, invalid keys, and quota exceeded scenarios with user-friendly error messages and recovery suggestions",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_007_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/youtube-api.ts", "src/lib/error-handler.ts"],
+          "task_file": "tasks/task_007_007.txt"
+        },
+        {
+          "id": "TASK_007_008",
+          "title": "Create YouTube data transformation utilities",
+          "description": "Build data mapping and transformation utilities to convert YouTube API responses to application-specific formats with proper type safety and validation",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_007_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/youtube-transformers.ts", "src/types/youtube.ts"],
+          "task_file": "tasks/task_007_008.txt"
+        }
+      ]
+    },
+    {
+      "id": "TASK_008",
+      "title": "Connect category-based video fetching to existing UI",
+      "description": "Integrate YouTube API results with existing SearchResults and VideoCard components",
+      "status": "Not Started",
+      "priority": "High",
+      "dependencies": ["TASK_007", "TASK_004"],
+      "complexity": 6,
+      "phase": "API Integration",
+      "component_integration": "src/components/SearchResults.tsx, src/components/VideoCard.tsx",
+      "files_to_modify": ["src/components/SearchResults.tsx", "src/pages/Home.tsx"],
+      "task_file": "tasks/task_008.txt"
+    },
+    {
+      "id": "TASK_009",
+      "title": "Implement transcript extraction service", 
+      "description": "Create client-side service for extracting YouTube video transcripts using youtube-transcript-api or similar",
+      "status": "Not Started",
+      "priority": "Medium",
+      "dependencies": ["TASK_007"],
+      "complexity": 7,
+      "phase": "Intelligence",
+      "component_integration": "Client-side transcript service",
+      "files_to_modify": ["src/lib/transcript-extractor.ts", "src/api/videos.ts"],
+      "task_file": "tasks/task_009.txt"
+    },
+    {
+      "id": "TASK_010",
+      "title": "Set up OpenAI API integration for content analysis",
+      "description": "Create AI analysis service for video transcript processing and relevance scoring using OpenAI API",
+      "status": "Not Started",
+      "priority": "Medium", 
+      "dependencies": ["TASK_009"],
+      "complexity": 8,
+      "phase": "Intelligence",
+      "component_integration": "Client-side AI service + existing relevance scoring",
+      "files_to_modify": ["src/lib/openai-analysis.ts", "src/api/videos.ts"],
+      "task_file": "tasks/task_010.txt"
+    },
+    {
+      "id": "TASK_011",
+      "title": "Enhance VideoCard component with AI insights",
+      "description": "Extend existing VideoCard to display AI-generated insights and improved relevance scores",
+      "status": "Not Started",
+      "priority": "Medium",
+      "dependencies": ["TASK_010", "TASK_008"],
+      "complexity": 5,
+      "phase": "Intelligence", 
+      "component_integration": "src/components/VideoCard.tsx",
+      "files_to_modify": ["src/components/VideoCard.tsx"],
+      "task_file": "tasks/task_011.txt"
+    },
+    {
+      "id": "TASK_012",
+      "title": "Set up Supabase project and database schema",
+      "description": "Create production database structure for users, categories, videos, and analysis data with Row Level Security",
+      "status": "Not Started",
+      "priority": "High",
+      "dependencies": ["TASK_001"],
+      "complexity": 6,
+      "phase": "Persistence",
+      "component_integration": "Database backend",
+      "files_to_modify": ["src/lib/supabase.ts", "src/types/supabase.ts", "database/schema.sql"],
+      "task_file": "tasks/task_012.txt"
+    },
+    {
+      "id": "TASK_013",
+      "title": "Implement user authentication with Supabase",
+      "description": "Add user signup, login, and session management to replace localStorage using Supabase Auth",
+      "status": "Not Started",
+      "priority": "High",
+      "dependencies": ["TASK_012"],
+      "complexity": 7,
+      "phase": "Persistence",
+      "component_integration": "New auth components + existing Settings",
+      "files_to_modify": ["src/components/Auth.tsx", "src/api/auth.ts", "src/store/index.ts"],
+      "task_file": "tasks/task_013.txt"
+    },
+    {
+      "id": "TASK_014",
+      "title": "Migrate category management to Supabase database",
+      "description": "Replace localStorage category storage with Supabase database operations using the established API layer",
+      "status": "Not Started",
+      "priority": "Medium",
+      "dependencies": ["TASK_013", "TASK_003"],
+      "complexity": 6,
+      "phase": "Persistence",
+      "component_integration": "src/store/index.ts + CategoryManager",
+      "files_to_modify": ["src/store/index.ts", "src/api/categories.ts"],
+      "task_file": "tasks/task_014.txt"
+    },
+    {
+      "id": "TASK_015",
+      "title": "Add secure API key encryption and storage",
+      "description": "Implement encrypted storage of YouTube and OpenAI API keys in Supabase with proper security measures",
+      "status": "Not Started",
+      "priority": "High",
+      "dependencies": ["TASK_013", "TASK_006"],
+      "complexity": 8,
+      "phase": "Persistence",
+      "component_integration": "Backend security + Settings UI",
+      "files_to_modify": ["src/lib/encryption.ts", "src/api/auth.ts"],
+      "task_file": "tasks/task_015.txt"
+    },
+    {
+      "id": "TASK_016",
+      "title": "Implement video caching and deduplication",
+      "description": "Add intelligent caching to reduce API calls and improve performance using Supabase storage",
+      "status": "Not Started",
+      "priority": "Low",
+      "dependencies": ["TASK_014", "TASK_008"],
+      "complexity": 7,
+      "phase": "Optimization",
+      "component_integration": "Backend caching + existing video display",
+      "files_to_modify": ["src/lib/video-cache.ts", "src/api/videos.ts"],
+      "task_file": "tasks/task_016.txt"
+    },
+    {
+      "id": "TASK_017",
+      "title": "Add usage analytics and quota monitoring",
+      "description": "Track API usage and provide user dashboard for quota monitoring using Supabase analytics",
+      "status": "Not Started",
+      "priority": "Low",
+      "dependencies": ["TASK_015", "TASK_010"],
+      "complexity": 6,
+      "phase": "Optimization",
+      "component_integration": "src/pages/Settings.tsx + new analytics components",
+      "files_to_modify": ["src/components/UsageAnalytics.tsx", "src/api/analytics.ts"],
+      "task_file": "tasks/task_017.txt"
+    },
+    {
+      "id": "TASK_018",
+      "title": "Create video bookmarking and saved lists",
+      "description": "Add save/bookmark functionality to existing VideoCard components using Supabase storage",
+      "status": "Not Started", 
+      "priority": "Low",
+      "dependencies": ["TASK_014", "TASK_011"],
+      "complexity": 5,
+      "phase": "Advanced Features",
+      "component_integration": "src/components/VideoCard.tsx + new SavedVideos component",
+      "files_to_modify": ["src/components/VideoCard.tsx", "src/components/SavedVideos.tsx", "src/api/videos.ts"],
+      "task_file": "tasks/task_018.txt"
+    },
+    {
+      "id": "TASK_019",
+      "title": "Add category templates and import/export",
+      "description": "Provide predefined category templates and allow users to share/import categories via Supabase",
+      "status": "Not Started",
+      "priority": "Low", 
+      "dependencies": ["TASK_014"],
+      "complexity": 6,
+      "phase": "Advanced Features",
+      "component_integration": "src/components/CategoryManager.tsx",
+      "files_to_modify": ["src/components/CategoryManager.tsx", "src/api/categories.ts"],
+      "task_file": "tasks/task_019.txt"
+    },
+    {
+      "id": "TASK_020",
+      "title": "Implement comprehensive error handling",
+      "description": "Add error boundaries, API error handling, and user feedback systems for Supabase and external APIs",
+      "status": "Not Started",
+      "priority": "Medium",
+      "dependencies": ["TASK_008", "TASK_010"],
+      "complexity": 5,
+      "phase": "Production Polish",
+      "component_integration": "Global error handling + all components",
+      "files_to_modify": ["src/components/ErrorBoundary.tsx", "src/components/ErrorFeedback.tsx", "src/lib/error-handler.ts"],
+      "task_file": "tasks/task_020.txt"
+    },
+    {
+      "id": "TASK_021",
+      "title": "Set up production deployment pipeline",
+      "description": "Configure Vercel deployment with environment variables and Supabase connections for Vite build",
+      "status": "Not Started",
+      "priority": "Low",
+      "dependencies": ["TASK_020"],
+      "complexity": 4,
+      "phase": "Production Polish",
+      "component_integration": "DevOps/Deployment",
+      "files_to_modify": ["vercel.json", ".env.example", "vite.config.ts"],
+      "task_file": "tasks/task_021.txt"
+    },
+    {
+      "id": "TASK_022",
+      "title": "Create user onboarding flow",
+      "description": "Build guided onboarding for Supabase account setup, API key configuration, and initial category creation",
+      "status": "Not Started",
+      "priority": "Medium",
+      "dependencies": ["TASK_006", "TASK_003"],
+      "complexity": 6,
+      "phase": "Production Polish",
+      "component_integration": "New onboarding components + existing flows",
+      "files_to_modify": ["src/components/Onboarding.tsx", "src/pages/onboarding.tsx"],
+      "task_file": "tasks/task_022.txt"
+    },
+    {
+      "id": "TASK_023",
+      "title": "Add batch video processing for large categories",
+      "description": "Implement client-side batch processing for large-scale video analysis with progress tracking",
+      "status": "Not Started",
+      "priority": "Low",
+      "dependencies": ["TASK_016", "TASK_010"],
+      "complexity": 9,
+      "phase": "Optimization",
+      "component_integration": "Client-side batch processing + UI progress indicators",
+      "files_to_modify": ["src/lib/batch-processor.ts", "src/api/videos.ts", "src/components/ProcessingStatus.tsx"],
+      "task_file": "tasks/task_023.txt"
+    },
+    {
+      "id": "TASK_024",
+      "title": "Implement advanced video filtering and sorting",
+      "description": "Add filters for duration, date, quality score, and custom sorting options integrated with Supabase queries",
+      "status": "Not Started",
+      "priority": "Low",
+      "dependencies": ["TASK_011", "TASK_008"],
+      "complexity": 5,
+      "phase": "Advanced Features",
+      "component_integration": "src/components/SearchResults.tsx + new FilterPanel",
+      "files_to_modify": ["src/components/FilterPanel.tsx", "src/components/SearchResults.tsx"],
+      "task_file": "tasks/task_024.txt"
+    }
+  ],
+  "phases": {
+    "Foundation": {
+      "description": "Core category system and data models",
+      "tasks": ["TASK_001", "TASK_002", "TASK_003", "TASK_004"],
+      "estimated_duration": "1-2 weeks"
+    },
+    "API Integration": {
+      "description": "Supabase client setup and YouTube API integration",
+      "tasks": ["TASK_005", "TASK_006", "TASK_007", "TASK_008"],
+      "estimated_duration": "2-3 weeks"
+    },
+    "Intelligence": {
+      "description": "AI analysis and content scoring",
+      "tasks": ["TASK_009", "TASK_010", "TASK_011"],
+      "estimated_duration": "2-3 weeks"
+    },
+    "Persistence": {
+      "description": "Supabase database integration and user management",
+      "tasks": ["TASK_012", "TASK_013", "TASK_014", "TASK_015"],
+      "estimated_duration": "2-3 weeks"
+    },
+    "Optimization": {
+      "description": "Performance improvements and caching",
+      "tasks": ["TASK_016", "TASK_017", "TASK_023"],
+      "estimated_duration": "1-2 weeks"
+    },
+    "Advanced Features": {
+      "description": "Enhanced user experience features",
+      "tasks": ["TASK_018", "TASK_019", "TASK_024"],
+      "estimated_duration": "2-3 weeks"
+    },
+    "Production Polish": {
+      "description": "Error handling, deployment, and onboarding",
+      "tasks": ["TASK_020", "TASK_021", "TASK_022"],
+      "estimated_duration": "1-2 weeks"
+    }
+  },
+  "critical_path": [
+    "TASK_001",
+    "TASK_002", 
+    "TASK_003",
+    "TASK_005",
+    "TASK_012",
+    "TASK_006",
+    "TASK_007",
+    "TASK_008",
+    "TASK_009",
+    "TASK_010",
+    "TASK_011"
+  ],
+  "integration_notes": {
+    "architecture_changes": {
+      "from": "Next.js API routes (pages/api/)",
+      "to": "Vite + Supabase client (src/api/ + src/lib/)",
+      "rationale": "Project uses Vite + React with Supabase as backend, not Next.js"
+    },
+    "existing_components": {
+      "VideoCard": "Extend with AI insights and enhanced relevance scoring",
+      "SearchResults": "Integrate with category-based filtering",
+      "Settings": "Add API key management and category configuration",
+      "Header": "Add category selector navigation",
+      "Hero": "Update messaging for category-based curation"
+    },
+    "new_components": {
+      "CategoryManager": "CRUD interface for category management",
+      "CategorySelector": "Navigation component for category switching",
+      "ApiKeySetup": "YouTube/OpenAI API key configuration with validation",
+      "UsageAnalytics": "API usage monitoring and quota tracking",
+      "Onboarding": "Guided setup for new users"
+    },
+    "supabase_integration": {
+      "client_setup": "src/lib/supabase.ts - Centralized client configuration",
+      "api_layer": "src/api/ - Service layer for all Supabase operations",
+      "types": "src/types/supabase.ts - Generated database types",
+      "auth": "Supabase Auth for user management",
+      "storage": "Supabase for video caching and API key storage",
+      "realtime": "Supabase realtime for live updates"
+    }
+  }
+} 

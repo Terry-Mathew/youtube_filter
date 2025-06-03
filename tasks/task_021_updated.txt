@@ -1,0 +1,161 @@
+TASK_021: Set up production deployment pipeline
+
+DESCRIPTION:
+Configure Vercel deployment with environment variables and Supabase connections for Vite build. This task sets up the complete production deployment pipeline optimized for Vite + React + Supabase architecture.
+
+ARCHITECTURE CHANGE:
+- FROM: Next.js deployment (next.config.js, Next.js specific configs)
+- TO: Vite deployment (vite.config.ts, Vite build optimizations)
+
+DEPENDENCIES:
+- TASK_020 (Error handling) - Ensures robust production error handling
+
+ANTICIPATES:
+- Production launch and user onboarding
+
+FILES TO MODIFY:
+1. vercel.json
+   - Vite-specific build configuration
+   - SPA routing configuration for React Router
+   - Environment variable settings
+   - Build output directory configuration
+   - Redirect rules for client-side routing
+
+2. .env.example
+   - Complete environment variable template
+   - Supabase configuration variables
+   - API key placeholders
+   - Production vs development configurations
+   - Documentation for each variable
+
+3. vite.config.ts
+   - Production build optimizations
+   - Bundle splitting and code organization
+   - Environment variable handling
+   - Build performance optimizations
+   - Asset optimization settings
+
+IMPLEMENTATION DETAILS:
+
+1. Vercel Configuration:
+   ```json
+   {
+     "buildCommand": "npm run build",
+     "outputDirectory": "dist",
+     "devCommand": "npm run dev",
+     "installCommand": "npm install",
+     "framework": null,
+     "rewrites": [
+       { "source": "/(.*)", "destination": "/index.html" }
+     ]
+   }
+   ```
+
+2. Environment Variables:
+   - VITE_SUPABASE_URL (Supabase project URL)
+   - VITE_SUPABASE_ANON_KEY (Supabase anonymous key)
+   - VITE_APP_ENVIRONMENT (production/staging/development)
+   - VITE_YOUTUBE_API_QUOTA_LIMIT (optional quota monitoring)
+   - VITE_OPENAI_MODEL (default AI model configuration)
+
+3. Vite Build Configuration:
+   - Bundle size optimization
+   - Tree shaking configuration
+   - CSS optimization
+   - Asset compression
+   - Source map configuration for production
+
+4. Supabase Integration:
+   - Database connection validation
+   - Edge function deployment (if needed)
+   - Row Level Security verification
+   - Migration deployment strategy
+
+5. Performance Optimizations:
+   - Lazy loading for route components
+   - Code splitting by feature
+   - Asset preloading strategies
+   - Service worker configuration (optional)
+
+DEPLOYMENT PIPELINE:
+
+1. Pre-deployment Checks:
+   - TypeScript compilation
+   - ESLint validation
+   - Unit test execution
+   - Build process verification
+   - Environment variable validation
+
+2. Build Process:
+   - Clean build directory
+   - TypeScript compilation
+   - Asset optimization
+   - Bundle generation
+   - Source map creation
+
+3. Deployment Steps:
+   - Vercel deployment
+   - Environment variable injection
+   - Database migration (if needed)
+   - Health check verification
+   - Rollback preparation
+
+4. Post-deployment Validation:
+   - Application health checks
+   - Supabase connection verification
+   - API endpoint testing
+   - Performance monitoring setup
+
+MONITORING AND ANALYTICS:
+
+1. Error Tracking:
+   - Integration with existing error boundaries
+   - Production error logging
+   - Performance monitoring
+   - User experience tracking
+
+2. Performance Metrics:
+   - Core Web Vitals monitoring
+   - Bundle size tracking
+   - Load time optimization
+   - API response time monitoring
+
+3. Security Monitoring:
+   - Environment variable security
+   - API key usage monitoring
+   - Supabase security audit
+   - Access pattern analysis
+
+VALIDATION CRITERIA:
+- ✓ Successful Vercel deployment
+- ✓ All environment variables properly configured
+- ✓ Supabase connection works in production
+- ✓ Client-side routing functions correctly
+- ✓ Build process completes without errors
+- ✓ Performance metrics meet targets
+- ✓ Error handling works in production
+- ✓ Security configurations are active
+
+PRODUCTION CHECKLIST:
+1. Environment variables configured in Vercel dashboard
+2. Supabase project configured for production
+3. Domain configuration (if custom domain)
+4. SSL certificate setup
+5. Performance monitoring enabled
+6. Error tracking configured
+7. Analytics integration (optional)
+8. Backup and recovery procedures documented
+
+ROLLBACK STRATEGY:
+1. Previous deployment preservation
+2. Database migration rollback procedures
+3. Environment variable version control
+4. Quick rollback command documentation
+5. Emergency contact procedures
+
+INTEGRATION NOTES:
+- This deployment supports the full Vite + Supabase architecture
+- Environment variable naming follows Vite conventions (VITE_ prefix)
+- Configuration supports both staging and production environments
+- Deployment pipeline integrates with existing CI/CD workflows
+- Performance optimizations maintain development experience 
