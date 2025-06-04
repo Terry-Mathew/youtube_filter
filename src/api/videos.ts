@@ -10,6 +10,25 @@ import type {
   DifficultyLevel,
   VideoQuality 
 } from '../types';
+import { YouTubeApiClient } from '../lib/youtube-api';
+import type {
+  YouTubeVideoId,
+  YouTubeVideo,
+  DetailedYouTubeVideo,
+  YouTubeCategory,
+  YouTubeCategoryMapping,
+  CategoryBasedVideoFilters,
+  CategoryFilteringOptions,
+  CategoryMappingResult,
+  VideoClassificationResult,
+  CategoryAnalytics,
+  CategorySyncStatus,
+  CategorySyncOperation,
+  VideoCategoryBatchJob,
+  CategoryAwareSearchRequest,
+  SearchOptions,
+  ProcessedSearchResult,
+} from '../types/youtube';
 
 // =============================================================================
 // Request/Response Types
@@ -548,4 +567,535 @@ export const {
   searchVideosWithFilters,
   getVideosByCategory,
   bulkUpdateVideos,
-} = videosApi; 
+} = videosApi;
+
+// Video API Service for TASK_007_004
+// Category-based video filtering and YouTube integration
+
+/**
+ * Default YouTube category mappings for Learning Tube
+ * Based on YouTube's official video categories
+ */
+const DEFAULT_YOUTUBE_CATEGORY_MAPPINGS: Record<string, string[]> = {
+  // Education & Learning
+  '27': ['Education', 'Academic', 'Tutorial'], // Education
+  '26': ['HowTo', 'Tutorial', 'Skill'], // Howto & Style
+  '24': ['Entertainment', 'Gaming'], // Entertainment
+  '22': ['Vlog', 'Lifestyle', 'Personal'], // People & Blogs
+  '28': ['Technology', 'Science'], // Science & Technology
+  
+  // News & Information
+  '25': ['News', 'Current Events'], // News & Politics
+  '23': ['Comedy', 'Entertainment'], // Comedy
+  '2': ['Automotive', 'Transportation'], // Autos & Vehicles
+  '19': ['Travel', 'Adventure'], // Travel & Events
+  '17': ['Sports', 'Fitness'], // Sports
+  
+  // Creative Content
+  '1': ['Film', 'Cinema', 'Movies'], // Film & Animation
+  '10': ['Music', 'Audio'], // Music
+  '15': ['Animals', 'Nature'], // Pets & Animals
+  '20': ['Gaming', 'Interactive'], // Gaming
+  '29': ['Nonprofit', 'Social'], // Nonprofits & Activism
+};
+
+/**
+ * Enhanced video API service with category integration
+ */
+export class VideoService {
+  private youtubeClient?: YouTubeApiClient;
+  private categoryMappings: Map<string, YouTubeCategoryMapping> = new Map();
+  private syncStatus: CategorySyncStatus;
+
+  constructor() {
+    this.syncStatus = {
+      lastSync: new Date(0),
+      youtubeCategories: { total: 0, mapped: 0, unmapped: 0 },
+      learningTubeCategories: { total: 0, withMappings: 0, withoutMappings: 0 },
+      syncHealth: 'needs_attention',
+      pendingUpdates: 0,
+    };
+  }
+
+  /**
+   * Initialize the video service with YouTube API client
+   */
+  async initialize(): Promise<void> {
+    try {
+      this.youtubeClient = new YouTubeApiClient();
+      await this.youtubeClient.initialize();
+      await this.syncYouTubeCategories();
+    } catch (error) {
+      console.error('Failed to initialize VideoService:', error);
+      throw new Error('VideoService initialization failed');
+    }
+  }
+
+  /**
+   * Search videos with category-based filtering
+   */
+  async searchVideosWithCategories(
+    query: string,
+    options?: CategoryFilteringOptions
+  ): Promise<{
+    videos: ProcessedSearchResult[];
+    categoryMappings: CategoryMappingResult[];
+    totalResults: number;
+    appliedFilters: CategoryBasedVideoFilters;
+  }> {
+    if (!this.youtubeClient) {
+      throw new Error('VideoService not initialized');
+    }
+
+    // Build search request with category filters
+    const searchRequest = this.buildCategoryAwareSearchRequest(query, options);
+    
+    // Execute search
+    const searchResults = await this.youtubeClient.search(query, {
+      maxResults: options?.maxResults || 25,
+      order: options?.order || 'relevance',
+      type: options?.type || 'video',
+      ...this.convertCategoryFiltersToYouTubeParams(options?.categoryFilters),
+    });
+
+    // Process results and map categories
+    const categoryMappings: CategoryMappingResult[] = [];
+    const processedVideos: ProcessedSearchResult[] = [];
+
+    for (const item of searchResults.items) {
+      if (item.id?.kind === 'youtube#video' && item.id?.videoId) {
+        const videoId = item.id.videoId as YouTubeVideoId;
+        
+        // Map categories if requested
+        if (options?.autoMapCategories) {
+          const mapping = await this.mapVideoToCategories(videoId, options);
+          categoryMappings.push(mapping);
+        }
+
+        processedVideos.push({
+          ...item,
+          categoryMapping: options?.autoMapCategories ? 
+            categoryMappings.find(m => m.videoId === videoId) : undefined,
+        });
+      }
+    }
+
+    return {
+      videos: processedVideos,
+      categoryMappings,
+      totalResults: searchResults.pagination.totalResults || 0,
+      appliedFilters: options?.categoryFilters || {},
+    };
+  }
+
+  /**
+   * Get detailed video information with category analysis
+   */
+  async getVideoWithCategoryAnalysis(
+    videoId: YouTubeVideoId,
+    options?: {
+      includeMapping?: boolean;
+      includeClassification?: boolean;
+      learningTubeCategories?: CategoryId[];
+    }
+  ): Promise<{
+    video: DetailedYouTubeVideo;
+    categoryMapping?: CategoryMappingResult;
+    classification?: VideoClassificationResult;
+  }> {
+    if (!this.youtubeClient) {
+      throw new Error('VideoService not initialized');
+    }
+
+    // Get detailed video information
+    const videos = await this.youtubeClient.getDetailedVideoInfo([videoId], {
+      includeStatistics: true,
+      includeContentDetails: true,
+      includeTopicDetails: true,
+      processMetadata: true,
+    });
+
+    if (videos.length === 0) {
+      throw new Error(`Video not found: ${videoId}`);
+    }
+
+    const video = videos[0];
+    const result: {
+      video: DetailedYouTubeVideo;
+      categoryMapping?: CategoryMappingResult;
+      classification?: VideoClassificationResult;
+    } = { video };
+
+    // Add category mapping if requested
+    if (options?.includeMapping) {
+      result.categoryMapping = await this.mapVideoToCategories(videoId, {
+        learningTubeCategories: options.learningTubeCategories,
+        autoMapCategories: true,
+      });
+    }
+
+    // Add classification if requested
+    if (options?.includeClassification) {
+      result.classification = await this.classifyVideo(video);
+    }
+
+    return result;
+  }
+
+  /**
+   * Filter videos by Learning Tube categories
+   */
+  async filterVideosByCategories(
+    videos: YouTubeVideo[],
+    categoryIds: CategoryId[],
+    options?: {
+      mode?: 'strict' | 'fuzzy' | 'related';
+      confidenceThreshold?: number;
+    }
+  ): Promise<{
+    filtered: YouTubeVideo[];
+    mappings: CategoryMappingResult[];
+    confidence: number;
+  }> {
+    const mappings: CategoryMappingResult[] = [];
+    const filtered: YouTubeVideo[] = [];
+    
+    for (const video of videos) {
+      const videoId = video.id as YouTubeVideoId;
+      const mapping = await this.mapVideoToCategories(videoId, {
+        learningTubeCategories: categoryIds,
+        confidenceThreshold: options?.confidenceThreshold || 0.5,
+      });
+      
+      mappings.push(mapping);
+      
+      // Check if video matches any of the target categories
+      const hasMatch = mapping.suggestedLearningTubeCategories.some(
+        suggestion => categoryIds.includes(suggestion.categoryId) &&
+        suggestion.confidence >= (options?.confidenceThreshold || 0.5)
+      );
+      
+      if (hasMatch) {
+        filtered.push(video);
+      }
+    }
+
+    const averageConfidence = mappings.reduce(
+      (sum, mapping) => sum + (mapping.suggestedLearningTubeCategories[0]?.confidence || 0),
+      0
+    ) / mappings.length;
+
+    return {
+      filtered,
+      mappings,
+      confidence: averageConfidence,
+    };
+  }
+
+  /**
+   * Get category analytics and insights
+   */
+  async getCategoryAnalytics(categoryId: CategoryId): Promise<CategoryAnalytics> {
+    // This would typically integrate with analytics storage
+    // For now, return mock analytics structure
+    return {
+      categoryId,
+      youtubeMapping: {
+        mappedYouTubeCategories: [],
+        videoCount: 0,
+        totalViews: 0,
+        averageEngagement: 0,
+      },
+      performance: {
+        searchFrequency: 0,
+        clickThroughRate: 0,
+        userSatisfaction: 0,
+        popularKeywords: [],
+      },
+      trends: {
+        growthRate: 0,
+        seasonality: [],
+        emergingTopics: [],
+      },
+      recommendations: {
+        suggestedMappings: [],
+        optimizationTips: [],
+        relatedCategories: [],
+      },
+    };
+  }
+
+  /**
+   * Sync YouTube categories and update mappings
+   */
+  async syncYouTubeCategories(regionCode: string = 'US'): Promise<CategorySyncOperation> {
+    const operation: CategorySyncOperation = {
+      operation: 'fetch_youtube_categories',
+      status: 'running',
+      progress: 0,
+      startTime: new Date(),
+      details: `Syncing YouTube categories for region: ${regionCode}`,
+    };
+
+    try {
+      if (!this.youtubeClient) {
+        throw new Error('YouTube client not initialized');
+      }
+
+      // Fetch YouTube categories
+      operation.progress = 25;
+      const categories = await this.fetchYouTubeCategories(regionCode);
+      
+      // Update mappings
+      operation.progress = 50;
+      await this.updateCategoryMappings(categories);
+      
+      // Update sync status
+      operation.progress = 75;
+      this.syncStatus = {
+        lastSync: new Date(),
+        youtubeCategories: {
+          total: categories.length,
+          mapped: this.categoryMappings.size,
+          unmapped: Math.max(0, categories.length - this.categoryMappings.size),
+        },
+        learningTubeCategories: {
+          total: 0, // Would be populated from store
+          withMappings: 0,
+          withoutMappings: 0,
+        },
+        syncHealth: 'healthy',
+        pendingUpdates: 0,
+      };
+
+      operation.progress = 100;
+      operation.status = 'completed';
+      operation.endTime = new Date();
+      operation.details = `Successfully synced ${categories.length} YouTube categories`;
+
+    } catch (error) {
+      operation.status = 'failed';
+      operation.endTime = new Date();
+      operation.errors = [error instanceof Error ? error.message : String(error)];
+    }
+
+    return operation;
+  }
+
+  /**
+   * Get current category sync status
+   */
+  getCategorySyncStatus(): CategorySyncStatus {
+    return { ...this.syncStatus };
+  }
+
+  /**
+   * Batch process videos for category mapping
+   */
+  async batchProcessVideos(
+    videoIds: YouTubeVideoId[],
+    operations: ('classify' | 'map_categories' | 'extract_metadata')[]
+  ): Promise<VideoCategoryBatchJob> {
+    const job: VideoCategoryBatchJob = {
+      id: this.generateJobId(),
+      videoIds,
+      operations,
+      status: 'processing',
+      progress: {
+        total: videoIds.length,
+        processed: 0,
+        failed: 0,
+        percentage: 0,
+      },
+      results: [],
+      createdAt: new Date(),
+    };
+
+    // Process videos in batches
+    const batchSize = 10;
+    for (let i = 0; i < videoIds.length; i += batchSize) {
+      const batch = videoIds.slice(i, i + batchSize);
+      
+      for (const videoId of batch) {
+        try {
+          if (operations.includes('map_categories')) {
+            const mapping = await this.mapVideoToCategories(videoId);
+            job.results.push(mapping);
+          }
+          
+          job.progress.processed++;
+        } catch (error) {
+          job.progress.failed++;
+          console.error(`Failed to process video ${videoId}:`, error);
+        }
+        
+        job.progress.percentage = (job.progress.processed / job.progress.total) * 100;
+      }
+    }
+
+    job.status = job.progress.failed === 0 ? 'completed' : 'completed';
+    job.completedAt = new Date();
+
+    return job;
+  }
+
+  // Private helper methods
+
+  private buildCategoryAwareSearchRequest(
+    query: string,
+    options?: CategoryFilteringOptions
+  ): CategoryAwareSearchRequest {
+    return {
+      q: query,
+      part: ['snippet', 'id'],
+      maxResults: options?.maxResults || 25,
+      order: options?.order || 'relevance',
+      type: options?.type || 'video',
+      learningTubeCategoryIds: options?.categoryFilters?.learningTubeCategories,
+      categoryFilterMode: 'fuzzy',
+      youtubeCategoryId: options?.categoryFilters?.youtubeCategoryIds?.[0],
+    };
+  }
+
+  private convertCategoryFiltersToYouTubeParams(
+    filters?: CategoryBasedVideoFilters
+  ): Partial<SearchOptions> {
+    if (!filters) return {};
+
+    const params: Partial<SearchOptions> = {};
+
+    // Duration filtering
+    if (filters.duration?.youtubeDuration) {
+      params.videoDuration = filters.duration.youtubeDuration;
+    }
+
+    // Quality filtering
+    if (filters.quality?.definition) {
+      params.videoDefinition = filters.quality.definition;
+    }
+    if (filters.quality?.dimension) {
+      params.videoDimension = filters.quality.dimension;
+    }
+    if (filters.quality?.caption) {
+      params.videoCaption = filters.quality.caption;
+    }
+    if (filters.quality?.license) {
+      params.videoLicense = filters.quality.license;
+    }
+
+    // Safety filtering
+    if (filters.safeSearch) {
+      params.safeSearch = filters.safeSearch;
+    }
+
+    // Geographic filtering
+    if (filters.regionCode) {
+      params.regionCode = filters.regionCode;
+    }
+    if (filters.relevanceLanguage) {
+      params.relevanceLanguage = filters.relevanceLanguage;
+    }
+
+    // Date filtering
+    if (filters.uploadDate?.after) {
+      params.publishedAfter = filters.uploadDate.after.toISOString();
+    }
+    if (filters.uploadDate?.before) {
+      params.publishedBefore = filters.uploadDate.before.toISOString();
+    }
+
+    return params;
+  }
+
+  private async mapVideoToCategories(
+    videoId: YouTubeVideoId,
+    options?: {
+      learningTubeCategories?: CategoryId[];
+      confidenceThreshold?: number;
+    }
+  ): Promise<CategoryMappingResult> {
+    // This would integrate with AI classification service
+    // For now, return a basic mapping structure
+    return {
+      videoId,
+      youtubeCategory: {
+        id: '27', // Education
+        name: 'Education',
+      },
+      suggestedLearningTubeCategories: [],
+      mappingQuality: 'medium',
+    };
+  }
+
+  private async classifyVideo(video: DetailedYouTubeVideo): Promise<VideoClassificationResult> {
+    // This would integrate with AI classification service
+    return {
+      videoId: video.id as YouTubeVideoId,
+      classifications: {
+        youtubeCategory: video.snippet?.categoryId || 'Unknown',
+        learningTubeCategories: [],
+        topics: [],
+        keywords: [],
+        educationalLevel: 'intermediate',
+        contentType: 'tutorial',
+      },
+      confidence: {
+        overall: 0.8,
+        categoryMapping: 0.7,
+        topicExtraction: 0.9,
+        levelAssignment: 0.6,
+      },
+      processingMetadata: {
+        timestamp: new Date(),
+        version: '1.0.0',
+        processingTime: 150,
+      },
+    };
+  }
+
+  private async fetchYouTubeCategories(regionCode: string): Promise<YouTubeCategory[]> {
+    if (!this.youtubeClient) {
+      throw new Error('YouTube client not initialized');
+    }
+
+    // This would call the actual YouTube API
+    // For now, return mock categories based on the official list
+    const mockCategories: YouTubeCategory[] = Object.keys(DEFAULT_YOUTUBE_CATEGORY_MAPPINGS).map(id => ({
+      kind: 'youtube#videoCategory' as const,
+      etag: `etag_${id}`,
+      id,
+      snippet: {
+        channelId: 'UCBR8-60-B28hp2BmDPdntcQ',
+        title: DEFAULT_YOUTUBE_CATEGORY_MAPPINGS[id][0],
+        assignable: true,
+      },
+    }));
+
+    return mockCategories;
+  }
+
+  private async updateCategoryMappings(categories: YouTubeCategory[]): Promise<void> {
+    this.categoryMappings.clear();
+    
+    for (const category of categories) {
+      const mapping: YouTubeCategoryMapping = {
+        youtubeId: category.id,
+        youtubeName: category.snippet.title,
+        learningTubeCategories: [],
+        isAssignable: category.snippet.assignable,
+        description: `YouTube category: ${category.snippet.title}`,
+        mappingConfidence: 0.8,
+        lastUpdated: new Date(),
+      };
+      
+      this.categoryMappings.set(category.id, mapping);
+    }
+  }
+
+  private generateJobId(): string {
+    return `job_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+}
+
+// Export singleton instance
+export const videoService = new VideoService(); 

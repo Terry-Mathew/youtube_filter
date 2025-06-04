@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { 
-  Video, 
   UserPreferences,
   Category,
   CategorySettings,
@@ -12,6 +11,7 @@ import {
   MAX_CATEGORY_DESCRIPTION_LENGTH,
   MAX_CATEGORY_CRITERIA_LENGTH
 } from '../types';
+import type { VideoUI, SearchResultWithCategory } from '../types/video-ui';
 
 // =============================================================================
 // TASK_002_004: LocalStorage Persistence Configuration
@@ -451,7 +451,7 @@ interface CategorySelectionActions {
   clearCategorySelection: () => void;
   
   // Video filtering
-  getFilteredVideos: (options?: VideoFilterOptions) => Video[];
+  getFilteredVideos: (options?: VideoFilterOptions) => VideoUI[];
   
   // Category statistics and insights
   getCategoryStats: () => Record<CategoryId, CategoryStats>;
@@ -461,7 +461,7 @@ interface CategorySelectionActions {
   getFilteredCategories: () => Category[];
   
   // Smart suggestions
-  getSuggestedCategories: (video: Video) => Array<{ category: Category; score: number }>;
+  getSuggestedCategories: (video: VideoUI) => Array<{ category: Category; score: number }>;
   
   // Category combinations
   saveCategoryCombination: (combination: Omit<CategoryCombination, 'id' | 'createdAt'>) => string;
@@ -788,8 +788,8 @@ interface AppState extends CategoryState, CategoryActions, CategorySelectionActi
   setIsSearching: (isSearching: boolean) => void;
 
   // Existing video results
-  videos: Video[];
-  setVideos: (videos: Video[]) => void;
+  videos: VideoUI[];
+  setVideos: (videos: VideoUI[]) => void;
   
   // Existing search history
   searchHistory: SearchHistoryItem[];
@@ -1344,7 +1344,7 @@ export const useAppStore = create<AppState>()(
       /**
        * Get filtered videos based on selected categories and options
        */
-      getFilteredVideos: (options: VideoFilterOptions = {}): Video[] => {
+      getFilteredVideos: (options: VideoFilterOptions = {}): VideoUI[] => {
         const state = get();
         const {
           categories = state.selectedCategoryIds,
@@ -1477,7 +1477,7 @@ export const useAppStore = create<AppState>()(
       /**
        * Get smart category suggestions for a video based on AI analysis
        */
-      getSuggestedCategories: (video: Video): Array<{ category: Category; score: number }> => {
+      getSuggestedCategories: (video: VideoUI): Array<{ category: Category; score: number }> => {
         const state = get();
         
         if (!video.ai_analysis?.relevanceScores) {

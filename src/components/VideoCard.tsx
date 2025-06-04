@@ -1,11 +1,11 @@
 import React from 'react';
 import { ExternalLink, Clock, Award } from 'lucide-react';
-import { Video } from '../types';
+import { VideoUI } from '../types/video-ui';
 import { cn } from '../utils/cn';
 import { motion } from 'framer-motion';
 
 interface VideoCardProps {
-  video: Video;
+  video: VideoUI;
   index: number;
 }
 
