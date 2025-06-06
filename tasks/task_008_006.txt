@@ -1,0 +1,187 @@
+TASK_008_006: Add pagination and infinite scroll
+
+## Overview
+Implement pagination for YouTube API results with infinite scroll UI pattern and proper performance optimization using Intersection Observer API.
+
+## Objectives
+- Implement infinite scroll pattern using react-intersection-observer
+- Add pagination support for YouTube API results  
+- Optimize performance for large result sets
+- Create smooth loading states and transitions
+- Handle edge cases and error scenarios
+
+## Dependencies
+- TASK_008_003 (YouTube API integration with SearchResults)
+
+## Files to Modify
+- src/components/SearchResults.tsx
+- src/hooks/useInfiniteScroll.ts
+
+## Implementation Details
+
+### 1. Create useInfiniteScroll Hook
+```typescript
+// src/hooks/useInfiniteScroll.ts
+import { useInView } from 'react-intersection-observer';
+import { useCallback, useState, useRef } from 'react';
+
+export interface InfiniteScrollOptions {
+  threshold?: number;
+  rootMargin?: string;
+  enabled?: boolean;
+  hasNextPage?: boolean;
+  isFetching?: boolean;
+}
+
+export const useInfiniteScroll = (
+  fetchNextPage: () => Promise<void>,
+  options: InfiniteScrollOptions = {}
+) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const fetchingRef = useRef(false);
+
+  const { ref, inView } = useInView({
+    threshold: options.threshold || 0.1,
+    rootMargin: options.rootMargin || '200px',
+    triggerOnce: false,
+  });
+
+  const handleIntersect = useCallback(async () => {
+    if (!options.enabled || !options.hasNextPage || options.isFetching || fetchingRef.current) {
+      return;
+    }
+
+    fetchingRef.current = true;
+    setIsLoading(true);
+
+    try {
+      await fetchNextPage();
+    } catch (error) {
+      console.error('Error fetching next page:', error);
+    } finally {
+      setIsLoading(false);
+      fetchingRef.current = false;
+    }
+  }, [options.enabled, options.hasNextPage, options.isFetching, fetchNextPage]);
+
+  React.useEffect(() => {
+    if (inView) {
+      handleIntersect();
+    }
+  }, [inView, handleIntersect]);
+
+  return { ref, inView, isLoading };
+};
+```
+
+### 2. Enhanced Video Search with Pagination
+```typescript
+// Update useVideoSearch hook for pagination support
+const useVideoSearch = () => {
+  const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [nextPageToken, setNextPageToken] = useState(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  
+  const loadMore = useCallback(async () => {
+    if (!nextPageToken) return;
+    
+    try {
+      setLoading(true);
+      const response = await youtubeService.searchVideos({
+        pageToken: nextPageToken,
+        maxResults: 20
+      });
+      
+      setVideos(prev => [...prev, ...response.videos]);
+      setNextPageToken(response.nextPageToken);
+      setCurrentPage(prev => prev + 1);
+    } catch (error) {
+      console.error('Load more failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [nextPageToken]);
+
+  return {
+    videos,
+    loading,
+    hasNextPage: !!nextPageToken,
+    loadMore,
+    currentPage
+  };
+};
+```
+
+### 3. Update SearchResults Component
+```typescript
+// src/components/SearchResults.tsx
+export const SearchResults = ({ videos, loading, error, hasNextPage, onLoadMore }) => {
+  const { ref: infiniteScrollRef, isLoading: loadingMore } = useInfiniteScroll(
+    onLoadMore,
+    {
+      enabled: !loading && !error,
+      hasNextPage,
+      threshold: 0.1,
+      rootMargin: '200px 0px'
+    }
+  );
+
+  return (
+    <div className="search-results">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {videos.map((video, index) => (
+          <VideoCard key={video.id} video={video} />
+        ))}
+      </div>
+
+      {hasNextPage && (
+        <div ref={infiniteScrollRef} className="flex justify-center py-8">
+          {loadingMore ? (
+            <LoadingSpinner text="Loading more videos..." />
+          ) : (
+            <div className="text-gray-400">Scroll down to load more</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+## Performance Optimizations
+
+### Lazy Loading with Intersection Observer
+- Pre-load images 200px before they enter viewport
+- Use triggerOnce for one-time loading operations
+- Implement skeleton loading states
+
+### Memory Management
+- Limit total number of loaded videos
+- Implement virtual scrolling for very large lists
+- Clean up intersection observers properly
+
+### Network Optimization
+- Batch API requests efficiently
+- Implement request deduplication
+- Add retry logic for failed requests
+
+## Acceptance Criteria
+- [ ] Infinite scroll loads more videos automatically
+- [ ] Loading states are smooth and non-disruptive  
+- [ ] Performance optimized for large result sets
+- [ ] Error handling covers all failure scenarios
+- [ ] Accessibility requirements met
+- [ ] Memory usage optimized for long sessions
+
+## Testing Requirements
+- Unit tests for infinite scroll hook
+- Integration tests for SearchResults component  
+- Performance testing with large datasets
+- Accessibility testing with screen readers
+
+## Technical Considerations
+- Use react-intersection-observer for reliable intersection detection
+- Implement proper cleanup to prevent memory leaks
+- Handle edge cases like rapid scrolling
+- Ensure smooth UX with proper loading states 

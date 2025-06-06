@@ -1,0 +1,87 @@
+TASK_008_003: Integrate YouTube API with SearchResults component
+
+## Overview
+Connect YouTube Data API service to SearchResults component with proper state management, loading states, and error handling.
+
+## Objectives
+- Integrate YouTube API search functionality into SearchResults
+- Implement proper state management for search operations
+- Add loading states and error handling
+- Create custom hook for video search operations
+
+## Dependencies
+- TASK_008_001 (Video interface standardization)
+- TASK_007 (YouTube API integration)
+
+## Files to Modify
+- src/components/SearchResults.tsx
+- src/hooks/useVideoSearch.ts
+
+## Implementation Details
+
+### 1. Create useVideoSearch Hook
+```typescript
+// src/hooks/useVideoSearch.ts
+export interface UseVideoSearchParams {
+  query: string;
+  categoryId?: string;
+  maxResults?: number;
+  pageToken?: string;
+}
+
+export interface UseVideoSearchReturn {
+  videos: VideoUI[];
+  loading: boolean;
+  error: string | null;
+  hasNextPage: boolean;
+  nextPageToken: string | null;
+  searchVideos: (params: UseVideoSearchParams) => Promise<void>;
+  loadMore: () => Promise<void>;
+  clearResults: () => void;
+}
+```
+
+### 2. Update SearchResults Component
+- Replace mock data with real YouTube API calls
+- Add loading spinners and skeleton loading states
+- Implement error boundary for API failures
+- Add empty state handling
+- Integrate with category filtering
+
+### 3. State Management Integration
+- Connect to Zustand store for search state
+- Implement search history
+- Add search result caching
+- Handle concurrent search requests
+
+### 4. Error Handling
+- API quota exceeded scenarios
+- Network connectivity issues
+- Invalid search queries
+- Rate limiting responses
+
+## Acceptance Criteria
+- [ ] SearchResults displays real YouTube videos from API
+- [ ] Loading states are properly implemented
+- [ ] Error handling covers all failure scenarios
+- [ ] Search results are cached appropriately
+- [ ] Component handles empty search results gracefully
+- [ ] Search functionality works with category filtering
+
+## Testing Requirements
+- Unit tests for useVideoSearch hook
+- Integration tests for SearchResults component
+- Error scenario testing
+- Performance testing with large result sets
+
+## Performance Considerations
+- Implement result virtualization for large lists
+- Optimize re-renders during loading states
+- Debounce search input to reduce API calls
+- Implement proper cleanup for cancelled requests
+
+## Security Considerations
+- Sanitize search queries before API calls
+- Validate API responses before rendering
+- Handle malicious content in search results
+- Implement proper CORS handling 

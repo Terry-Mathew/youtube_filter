@@ -1,0 +1,248 @@
+TASK_012_002: Design and create core database tables
+
+## Overview
+Create tables for users, categories, videos, and analysis data with proper relationships and constraints in Supabase.
+
+## Objectives
+- Design normalized database schema
+- Create all core tables with proper relationships
+- Implement appropriate indexes for performance
+- Set up foreign key constraints and data integrity
+- Create utility tables for analytics and caching
+
+## Dependencies
+- TASK_012_001 (Supabase project setup)
+
+## Files to Modify
+- database/schema.sql
+- src/types/supabase.ts
+
+## Database Schema Design
+
+### 1. Core Tables
+
+#### users_profiles (extends auth.users)
+```sql
+CREATE TABLE public.user_profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT NOT NULL,
+  full_name TEXT,
+  avatar_url TEXT,
+  subscription_tier TEXT DEFAULT 'free' CHECK (subscription_tier IN ('free', 'premium', 'enterprise')),
+  api_quota_used INTEGER DEFAULT 0,
+  api_quota_limit INTEGER DEFAULT 1000,
+  preferences JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### categories
+```sql
+CREATE TABLE public.categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  keywords TEXT[] DEFAULT '{}',
+  color TEXT DEFAULT '#3B82F6',
+  icon TEXT,
+  is_active BOOLEAN DEFAULT true,
+  sort_order INTEGER DEFAULT 0,
+  settings JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_user_category_name UNIQUE(user_id, name)
+);
+```
+
+#### videos
+```sql
+CREATE TABLE public.videos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  youtube_id TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  description TEXT,
+  channel_id TEXT NOT NULL,
+  channel_title TEXT NOT NULL,
+  thumbnail_url TEXT,
+  duration TEXT,
+  published_at TIMESTAMPTZ,
+  view_count BIGINT DEFAULT 0,
+  like_count INTEGER DEFAULT 0,
+  comment_count INTEGER DEFAULT 0,
+  category_id TEXT, -- YouTube category
+  tags TEXT[] DEFAULT '{}',
+  language TEXT,
+  quality_score DECIMAL(3,2) DEFAULT 0.00,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### user_categories_videos (many-to-many relationship)
+```sql
+CREATE TABLE public.user_category_videos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  category_id UUID NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  relevance_score DECIMAL(3,2) DEFAULT 0.00,
+  ai_analysis JSONB DEFAULT '{}',
+  is_saved BOOLEAN DEFAULT false,
+  user_rating INTEGER CHECK (user_rating >= 1 AND user_rating <= 5),
+  notes TEXT,
+  watch_status TEXT DEFAULT 'unwatched' CHECK (watch_status IN ('unwatched', 'watching', 'completed')),
+  watch_progress INTEGER DEFAULT 0, -- percentage
+  added_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_user_category_video UNIQUE(user_id, category_id, video_id)
+);
+```
+
+### 2. Analytics and Tracking Tables
+
+#### api_usage_logs
+```sql
+CREATE TABLE public.api_usage_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  api_type TEXT NOT NULL CHECK (api_type IN ('youtube', 'openai', 'transcript')),
+  endpoint TEXT NOT NULL,
+  quota_used INTEGER DEFAULT 1,
+  cost_estimate DECIMAL(10,6) DEFAULT 0.00,
+  response_status INTEGER,
+  error_message TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### video_analysis_cache
+```sql
+CREATE TABLE public.video_analysis_cache (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  analysis_type TEXT NOT NULL CHECK (analysis_type IN ('transcript', 'ai_summary', 'relevance')),
+  analysis_data JSONB NOT NULL,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_video_analysis UNIQUE(video_id, analysis_type)
+);
+```
+
+#### user_search_history
+```sql
+CREATE TABLE public.user_search_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  query TEXT NOT NULL,
+  category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+  results_count INTEGER DEFAULT 0,
+  filters_applied JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### 3. Performance Indexes
+```sql
+-- User queries
+CREATE INDEX idx_categories_user_id ON categories(user_id);
+CREATE INDEX idx_categories_active ON categories(user_id, is_active);
+
+-- Video lookups
+CREATE INDEX idx_videos_youtube_id ON videos(youtube_id);
+CREATE INDEX idx_videos_channel ON videos(channel_id);
+CREATE INDEX idx_videos_published ON videos(published_at DESC);
+
+-- User video relationships
+CREATE INDEX idx_user_category_videos_user ON user_category_videos(user_id);
+CREATE INDEX idx_user_category_videos_category ON user_category_videos(category_id);
+CREATE INDEX idx_user_category_videos_relevance ON user_category_videos(relevance_score DESC);
+
+-- Analytics
+CREATE INDEX idx_api_usage_user_date ON api_usage_logs(user_id, created_at DESC);
+CREATE INDEX idx_api_usage_type ON api_usage_logs(api_type, created_at DESC);
+
+-- Cache
+CREATE INDEX idx_analysis_cache_video ON video_analysis_cache(video_id);
+CREATE INDEX idx_analysis_cache_expires ON video_analysis_cache(expires_at);
+```
+
+### 4. Functions and Triggers
+
+#### Updated timestamp trigger
+```sql
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply to relevant tables
+CREATE TRIGGER trigger_user_profiles_updated_at
+  BEFORE UPDATE ON user_profiles
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trigger_categories_updated_at
+  BEFORE UPDATE ON categories
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trigger_videos_updated_at
+  BEFORE UPDATE ON videos
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+```
+
+## Implementation Steps
+
+1. **Create schema file structure**
+   - Main schema with all tables
+   - Separate files for indexes, functions, triggers
+   - Migration scripts for updates
+
+2. **Implement foreign key constraints**
+   - Proper cascade behaviors
+   - Data integrity enforcement
+   - Reference validation
+
+3. **Add performance indexes**
+   - Query optimization
+   - Composite indexes for common queries
+   - Partial indexes where appropriate
+
+4. **Create database functions**
+   - Common operations
+   - Data validation
+   - Automated maintenance
+
+## Acceptance Criteria
+- [ ] All tables created with proper constraints
+- [ ] Foreign key relationships established
+- [ ] Performance indexes implemented
+- [ ] Trigger functions working correctly
+- [ ] Schema validates against requirements
+- [ ] Migration scripts ready for production
+
+## Testing Requirements
+- Schema validation tests
+- Constraint testing
+- Performance benchmarking
+- Data integrity verification
+- Migration testing
+
+## Performance Considerations
+- Proper indexing strategy
+- Query optimization
+- Connection pooling configuration
+- Partition strategies for large tables
+
+## Security Considerations
+- Row Level Security policies
+- Data encryption at rest
+- Audit logging capabilities
+- Backup and recovery procedures 

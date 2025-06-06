@@ -1,0 +1,233 @@
+TASK_008_005: Implement category-based search integration
+
+## Overview
+Connect category selector to video search functionality with proper keyword mapping and search query generation.
+
+## Objectives
+- Integrate CategorySelector with video search functionality
+- Implement intelligent keyword mapping for categories
+- Create search query generation based on category selection
+- Add real-time search updates when categories change
+- Implement category-specific search filters
+
+## Dependencies
+- TASK_008_003 (YouTube API integration with SearchResults)
+- TASK_004 (CategorySelector component)
+
+## Files to Modify
+- src/pages/Home.tsx
+- src/hooks/useCategorySearch.ts
+
+## Implementation Details
+
+### 1. Create useCategorySearch Hook
+
+```typescript
+// src/hooks/useCategorySearch.ts
+export interface CategorySearchParams {
+  categoryId?: string;
+  customQuery?: string;
+  maxResults?: number;
+  sortBy?: 'relevance' | 'date' | 'viewCount' | 'rating';
+}
+
+export interface CategorySearchReturn {
+  searchQuery: string;
+  isSearching: boolean;
+  searchResults: VideoUI[];
+  error: string | null;
+  performSearch: (params: CategorySearchParams) => Promise<void>;
+  clearSearch: () => void;
+  generateCategoryQuery: (categoryId: string) => string;
+}
+
+export const useCategorySearch = (): CategorySearchReturn => {
+  // Implementation details
+}
+```
+
+### 2. Keyword Mapping and Query Generation
+
+#### Smart Query Building
+- Combine category keywords into effective search queries
+- Apply category-specific search modifiers
+- Handle multiple keyword combinations
+- Add negative keywords to filter out irrelevant content
+
+```typescript
+const generateCategoryQuery = (categoryId: string): string => {
+  const category = categories.find(c => c.id === categoryId);
+  if (!category) return '';
+
+  const keywords = category.keywords || [];
+  const primaryKeywords = keywords.slice(0, 3); // Most important keywords
+  const modifiers = getCategoryModifiers(category.name);
+  
+  return `${primaryKeywords.join(' OR ')} ${modifiers}`;
+};
+
+const getCategoryModifiers = (categoryName: string): string => {
+  const modifierMap = {
+    'Programming': 'tutorial OR course OR learn',
+    'Science': 'explained OR documentary OR research',
+    'Mathematics': 'tutorial OR explanation OR proof',
+    // Add more category-specific modifiers
+  };
+  
+  return modifierMap[categoryName] || '';
+};
+```
+
+### 3. Home Page Integration
+
+#### Update Home.tsx Component
+```typescript
+// src/pages/Home.tsx
+const Home: React.FC = () => {
+  const { selectedCategory } = useCategoryStore();
+  const { searchQuery, performSearch, searchResults, isSearching } = useCategorySearch();
+  
+  // Auto-search when category changes
+  useEffect(() => {
+    if (selectedCategory) {
+      performSearch({ categoryId: selectedCategory.id });
+    }
+  }, [selectedCategory, performSearch]);
+
+  return (
+    <div className="home-container">
+      <CategorySelector />
+      <SearchInput 
+        onSearch={(query) => performSearch({ customQuery: query })}
+        placeholder={`Search in ${selectedCategory?.name || 'All Categories'}`}
+      />
+      <SearchResults 
+        videos={searchResults}
+        loading={isSearching}
+        category={selectedCategory}
+      />
+    </div>
+  );
+};
+```
+
+### 4. Advanced Search Features
+
+#### Category-Specific Filters
+- Duration preferences by category
+- Quality thresholds for educational content
+- Channel reputation scoring
+- Content freshness requirements
+
+#### Search Query Optimization
+```typescript
+const optimizeSearchQuery = (category: Category, baseQuery: string): string => {
+  const optimizations = {
+    minDuration: category.settings?.minDuration || '5m',
+    maxDuration: category.settings?.maxDuration || '60m',
+    quality: category.settings?.qualityThreshold || 'high',
+    language: category.settings?.language || 'en'
+  };
+
+  let optimizedQuery = baseQuery;
+  
+  // Add duration filters
+  if (optimizations.minDuration) {
+    optimizedQuery += ` duration:${optimizations.minDuration}+`;
+  }
+  
+  // Add quality indicators
+  if (optimizations.quality === 'high') {
+    optimizedQuery += ' HD OR 4K OR "high quality"';
+  }
+
+  return optimizedQuery;
+};
+```
+
+### 5. Real-time Search Updates
+
+#### Debounced Category Changes
+```typescript
+const debouncedCategorySearch = useCallback(
+  debounce((categoryId: string) => {
+    performSearch({ categoryId });
+  }, 500),
+  [performSearch]
+);
+
+useEffect(() => {
+  if (selectedCategory?.id) {
+    debouncedCategorySearch(selectedCategory.id);
+  }
+}, [selectedCategory?.id, debouncedCategorySearch]);
+```
+
+#### Search State Management
+- Maintain search history per category
+- Cache search results by category
+- Handle concurrent searches gracefully
+- Provide search suggestions based on category
+
+### 6. Search Analytics and Optimization
+
+#### Track Search Performance
+```typescript
+const trackCategorySearch = (categoryId: string, query: string, resultCount: number) => {
+  analytics.track('category_search', {
+    category_id: categoryId,
+    search_query: query,
+    result_count: resultCount,
+    timestamp: new Date().toISOString()
+  });
+};
+```
+
+#### Smart Keyword Learning
+- Analyze successful searches by category
+- Suggest new keywords based on user behavior
+- Optimize search queries based on click-through rates
+- A/B test different query strategies
+
+## Technical Requirements
+
+### Search Query Validation
+- Validate search queries before API calls
+- Handle special characters and operators
+- Prevent injection attacks
+- Sanitize user input
+
+### Performance Optimization
+- Cache category search results
+- Implement search request deduplication
+- Use progressive search loading
+- Optimize for mobile devices
+
+### Error Handling
+- Handle API quota limits gracefully
+- Provide fallback search strategies
+- Show meaningful error messages
+- Implement retry logic for failed searches
+
+## Acceptance Criteria
+- [ ] Category selection triggers automatic search
+- [ ] Search queries are generated from category keywords
+- [ ] Custom search queries work with category context
+- [ ] Search results update in real-time
+- [ ] Category-specific filters are applied
+- [ ] Search performance is optimized
+- [ ] Error handling covers all scenarios
+- [ ] Analytics track search behavior
+
+## Testing Requirements
+- Unit tests for query generation logic
+- Integration tests for category-search flow
+- Performance tests for search responsiveness
+- User acceptance tests for search experience
+
+## Future Enhancements
+- Machine learning for query optimization
+- Natural language search within categories
+- Visual search suggestions
+- Voice search integration
+- Collaborative filtering recommendations 

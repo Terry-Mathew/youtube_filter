@@ -25,11 +25,13 @@
     "date-fns": "^4.1.0",
     "framer-motion": "^11.0.8",
     "lucide-react": "^0.344.0",
+    "openai": "^5.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.56.4",
     "react-router-dom": "^6.22.3",
     "tailwind-merge": "^2.2.1",
+    "youtube-transcript": "^1.2.1",
     "zod": "^3.25.46",
     "zustand": "^4.5.2"
   },

@@ -29,6 +29,19 @@ import type {
   SearchOptions,
   ProcessedSearchResult,
 } from '../types/youtube';
+import { transcriptExtractor } from '../lib/transcript-extractor';
+import { transcriptProcessor } from '../lib/transcript-processor';
+import type {
+  RawTranscriptData,
+  TranscriptForAnalysis,
+  TranscriptAvailability,
+  TranscriptExtractionOptions,
+  TranscriptMetadata
+} from '../types/transcript';
+import type {
+  AnalysisRequest,
+  AnalysisDepth
+} from '../types/analysis';
 
 // =============================================================================
 // Request/Response Types
@@ -349,7 +362,7 @@ export class VideosApi {
   
   /**
    * Get video transcript
-   * This will integrate with TASK_009 (transcript extraction service)
+   * Implemented with TASK_009 transcript extraction service
    */
   async getTranscript(request: GetTranscriptRequest): Promise<ApiResponse<TranscriptResponse>> {
     try {
@@ -358,28 +371,240 @@ export class VideosApi {
       if (authError || !user) {
         throw new Error('User not authenticated');
       }
+
+      // Extract transcript using TASK_009 implementation
+      const result = await transcriptExtractor.extractTranscript(request.videoId, {
+        language: request.language || 'en',
+        fallbackLanguages: ['en-US', 'en-GB'],
+        maxRetries: 3
+      });
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: result.error || 'Failed to extract transcript',
+          timestamp: new Date(),
+        };
+      }
+
+      const transcript = result.data;
       
-      // TODO: Replace with actual transcript extraction in TASK_009
-      // const transcriptResponse = await fetch(`/api/videos/${request.videoId}/transcript`, {
-      //   method: 'GET',
-      //   headers: { 'Content-Type': 'application/json' },
-      // });
-      
-      // Placeholder - will be replaced with actual transcript extraction
-      throw new Error('Transcript not available');
+      // Format response based on requested format
+      let formattedTranscript = transcript.fullText;
+      let segments;
+
+      if (request.format === 'vtt' || request.format === 'srt') {
+        formattedTranscript = this.formatTranscriptForSubtitles(transcript, request.format);
+      }
+
+      if (request.format !== 'text') {
+        segments = transcript.segments.map(seg => ({
+          start: seg.start,
+          end: seg.start + seg.duration,
+          text: seg.text
+        }));
+      }
+
+      return {
+        success: true,
+        data: {
+          videoId: request.videoId,
+          language: transcript.language,
+          transcript: formattedTranscript,
+          segments,
+          confidence: transcript.quality === 'high' ? 0.9 : transcript.quality === 'medium' ? 0.7 : 0.5,
+          source: 'youtube'
+        },
+        timestamp: new Date(),
+        requestId: crypto.randomUUID(),
+      };
       
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch transcript',
+        error: error instanceof Error ? error.message : 'Failed to get transcript',
         timestamp: new Date(),
       };
     }
   }
+
+  /**
+   * Get processed transcript optimized for AI analysis
+   */
+  async getProcessedTranscript(
+    videoId: VideoId,
+    options: TranscriptExtractionOptions = {}
+  ): Promise<ApiResponse<TranscriptForAnalysis>> {
+    try {
+      // Get raw transcript
+      const rawResult = await transcriptExtractor.extractTranscript(videoId, options);
+      
+      if (!rawResult.success || !rawResult.data) {
+        return {
+          success: false,
+          error: rawResult.error || 'Failed to extract transcript',
+          timestamp: new Date(),
+        };
+      }
+
+      // Process for analysis
+      const processed = transcriptProcessor.processForAnalysis(rawResult.data, {
+        cleanText: true,
+        mergeShortSegments: true,
+        removeMusic: true,
+        removeSoundEffects: true
+      });
+
+      return {
+        success: true,
+        data: processed,
+        timestamp: new Date(),
+        requestId: crypto.randomUUID(),
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to process transcript',
+        timestamp: new Date(),
+      };
+    }
+  }
+
+  /**
+   * Check transcript availability for multiple videos
+   */
+  async checkTranscriptAvailability(
+    videoIds: VideoId[]
+  ): Promise<ApiResponse<Record<VideoId, TranscriptAvailability>>> {
+    try {
+      const results: Record<VideoId, TranscriptAvailability> = {};
+
+      // Process in batches to avoid overwhelming the API
+      const batchSize = 5;
+      for (let i = 0; i < videoIds.length; i += batchSize) {
+        const batch = videoIds.slice(i, i + batchSize);
+        
+        const batchPromises = batch.map(async (videoId) => {
+          try {
+            const hasTranscript = await transcriptExtractor.hasTranscript(videoId);
+            const languages = hasTranscript 
+              ? await transcriptExtractor.getAvailableLanguagesForVideo(videoId)
+              : [];
+
+            return {
+              videoId,
+              availability: {
+                available: hasTranscript,
+                source: hasTranscript ? 'youtube' as const : 'none' as const,
+                languages: languages.map(lang => ({
+                  code: lang.language,
+                  name: lang.languageName || lang.language,
+                  isAutoGenerated: lang.isAutoGenerated
+                })),
+                quality: this.assessTranscriptQuality(languages)
+              }
+            };
+          } catch (error) {
+            console.warn(`Failed to check transcript availability for ${videoId}:`, error);
+            return {
+              videoId,
+              availability: {
+                available: false,
+                source: 'none' as const,
+                languages: [],
+                quality: 'unknown' as const,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              }
+            };
+          }
+        });
+
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        batchResults.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            results[result.value.videoId] = result.value.availability;
+          }
+        });
+      }
+
+      return {
+        success: true,
+        data: results,
+        timestamp: new Date(),
+        requestId: crypto.randomUUID(),
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to check transcript availability',
+        timestamp: new Date(),
+      };
+    }
+  }
+
+  /**
+   * Format transcript for subtitle formats (VTT/SRT)
+   */
+  private formatTranscriptForSubtitles(transcript: RawTranscriptData, format: 'vtt' | 'srt'): string {
+    if (format === 'vtt') {
+      let vtt = 'WEBVTT\n\n';
+      transcript.segments.forEach((segment, index) => {
+        const start = this.formatTime(segment.start);
+        const end = this.formatTime(segment.start + segment.duration);
+        vtt += `${start} --> ${end}\n${segment.text}\n\n`;
+      });
+      return vtt;
+    } else if (format === 'srt') {
+      let srt = '';
+      transcript.segments.forEach((segment, index) => {
+        const start = this.formatTimeForSRT(segment.start);
+        const end = this.formatTimeForSRT(segment.start + segment.duration);
+        srt += `${index + 1}\n${start} --> ${end}\n${segment.text}\n\n`;
+      });
+      return srt;
+    }
+    return transcript.fullText;
+  }
+
+  /**
+   * Format time for VTT format (HH:MM:SS.mmm)
+   */
+  private formatTime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 1000);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+  }
+
+  /**
+   * Format time for SRT format (HH:MM:SS,mmm)
+   */
+  private formatTimeForSRT(seconds: number): string {
+    return this.formatTime(seconds).replace('.', ',');
+  }
+
+  /**
+   * Assess transcript quality from language info
+   */
+  private assessTranscriptQuality(languages: any[]): 'high' | 'medium' | 'low' | 'unknown' {
+    if (languages.length === 0) return 'unknown';
+    
+    // Prefer manual captions over auto-generated
+    const hasManual = languages.some(lang => !lang.isAutoGenerated);
+    if (hasManual) return 'high';
+    
+    // Auto-generated captions are medium quality
+    return 'medium';
+  }
   
   /**
    * Analyze video content using AI
-   * This will integrate with TASK_010 (OpenAI API integration)
+   * Implemented with TASK_010 OpenAI API integration
    */
   async analyzeVideo(request: AnalyzeVideoRequest): Promise<ApiResponse<VideoAnalysis>> {
     try {
@@ -388,16 +613,86 @@ export class VideosApi {
       if (authError || !user) {
         throw new Error('User not authenticated');
       }
+
+      // Get processed transcript for analysis
+      const transcriptResult = await this.getProcessedTranscript(request.videoId);
       
-      // TODO: Replace with actual AI analysis in TASK_010
-      // const analysisResponse = await fetch(`/api/videos/${request.videoId}/analyze`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(request),
-      // });
-      
-      // Placeholder - will be replaced with actual AI analysis
-      throw new Error('Video analysis not available');
+      if (!transcriptResult.success || !transcriptResult.data) {
+        return {
+          success: false,
+          error: 'Failed to get transcript for analysis',
+          timestamp: new Date(),
+        };
+      }
+
+      const transcript = transcriptResult.data;
+
+      // Get user's categories for analysis (placeholder - will be from TASK_012)
+      const userCategories = await this.getUserCategories(user.id);
+
+      // Determine analysis depth based on request type
+      const analysisDepth = this.getAnalysisDepth(request.analysisType || 'quick');
+
+      // Prepare analysis request
+      const analysisRequest: AnalysisRequest = {
+        videoId: request.videoId,
+        transcript: transcript.text,
+        categories: userCategories,
+        depth: analysisDepth,
+        options: {
+          includeInsights: true,
+          includeCategoryAnalysis: true,
+          maxCost: 0.10 // Per-video cost limit
+        }
+      };
+
+      // Perform AI analysis
+      const { openAIAnalysis } = await import('../lib/openai-analysis');
+      const analysisResult = await openAIAnalysis.analyzeVideo(analysisRequest);
+
+      // Convert to VideoAnalysis format
+      const videoAnalysis: VideoAnalysis = {
+        id: crypto.randomUUID() as any, // TODO: Fix type in TASK_012
+        video_id: request.videoId,
+        category_id: request.categoryId || null,
+        user_id: user.id,
+        relevance_score: this.calculateOverallRelevance(analysisResult.relevanceScores),
+        content_insights: {
+          summary: analysisResult.insights.summary,
+          difficulty: analysisResult.insights.difficulty,
+          topics: analysisResult.insights.mainTopics,
+          learning_objectives: analysisResult.insights.learningObjectives,
+          estimated_duration: analysisResult.insights.estimatedLearningTime,
+          quality_score: this.calculateQualityScore(analysisResult.insights.contentQuality)
+        },
+        category_suggestions: analysisResult.categoryAnalysis.categoryMatches.map(match => ({
+          category_id: match.categoryId,
+          relevance_score: match.relevanceScore,
+          confidence: match.confidence,
+          matched_keywords: match.matchedKeywords
+        })),
+        processing_metadata: {
+          model_used: analysisResult.insights.modelUsed,
+          tokens_used: analysisResult.insights.tokensUsed,
+          cost: analysisResult.insights.estimatedCost,
+          processing_time: analysisResult.processingTime,
+          analysis_version: analysisResult.insights.analysisVersion,
+          cache_key: analysisResult.cacheKey
+        },
+        confidence_score: analysisResult.insights.confidence,
+        analyzed_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+      };
+
+      // TODO: Save to database in TASK_012
+      // await this.saveVideoAnalysis(videoAnalysis);
+
+      return {
+        success: true,
+        data: videoAnalysis,
+        timestamp: new Date(),
+        requestId: crypto.randomUUID(),
+      };
       
     } catch (error) {
       return {
@@ -406,6 +701,69 @@ export class VideosApi {
         timestamp: new Date(),
       };
     }
+  }
+
+  /**
+   * Get user's categories for analysis (placeholder for TASK_012)
+   */
+  private async getUserCategories(userId: string): Promise<Array<{
+    id: string;
+    name: string;
+    keywords: string[];
+  }>> {
+    // TODO: Replace with actual Supabase query in TASK_012
+    // For now, return some default categories
+    return [
+      {
+        id: 'programming',
+        name: 'Programming',
+        keywords: ['code', 'programming', 'development', 'software', 'javascript', 'python', 'react']
+      },
+      {
+        id: 'tutorial',
+        name: 'Tutorial',
+        keywords: ['tutorial', 'how to', 'guide', 'step by step', 'learn', 'beginner']
+      },
+      {
+        id: 'technology',
+        name: 'Technology',
+        keywords: ['tech', 'technology', 'innovation', 'digital', 'computer', 'AI', 'machine learning']
+      }
+    ];
+  }
+
+  /**
+   * Get analysis depth based on request type
+   */
+  private getAnalysisDepth(analysisType: 'quick' | 'detailed' | 'comprehensive'): AnalysisDepth {
+    switch (analysisType) {
+      case 'quick': return 'basic';
+      case 'detailed': return 'standard';
+      case 'comprehensive': return 'deep';
+      default: return 'basic';
+    }
+  }
+
+  /**
+   * Calculate overall relevance score
+   */
+  private calculateOverallRelevance(relevanceScores: Record<string, number>): number {
+    const scores = Object.values(relevanceScores);
+    if (scores.length === 0) return 0;
+    
+    // Return the highest relevance score
+    return Math.max(...scores);
+  }
+
+  /**
+   * Calculate quality score from content quality metrics
+   */
+  private calculateQualityScore(contentQuality: {
+    clarity: number;
+    completeness: number;
+    practicalValue: number;
+  }): number {
+    return Math.round((contentQuality.clarity + contentQuality.completeness + contentQuality.practicalValue) / 3);
   }
   
   /**

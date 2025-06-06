@@ -1,0 +1,106 @@
+TASK_008_004: Update VideoCard for YouTube API data
+
+## Overview
+Modify VideoCard component to properly display YouTube API video data with thumbnails, statistics, and metadata.
+
+## Objectives
+- Update VideoCard to work with VideoUI interface
+- Display YouTube-specific metadata and statistics
+- Implement proper thumbnail handling
+- Add video duration, view count, and engagement metrics
+- Ensure responsive design and accessibility
+
+## Dependencies
+- TASK_008_001 (Video interface standardization)
+- TASK_007 (YouTube API integration)
+
+## Files to Modify
+- src/components/VideoCard.tsx
+
+## Implementation Details
+
+### 1. Update VideoCard Props Interface
+```typescript
+interface VideoCardProps {
+  video: VideoUI;
+  onVideoClick?: (video: VideoUI) => void;
+  onSave?: (video: VideoUI) => void;
+  showCategory?: boolean;
+  showRelevanceScore?: boolean;
+}
+```
+
+### 2. YouTube Thumbnail Integration
+- Handle different thumbnail qualities (default, medium, high, standard, maxres)
+- Implement lazy loading for thumbnails
+- Add fallback images for missing thumbnails
+- Optimize thumbnail loading for performance
+
+### 3. Video Statistics Display
+- View count with proper formatting (1.2M, 15K)
+- Like/dislike ratios and engagement metrics
+- Upload date formatting (relative time)
+- Video duration formatting (HH:MM:SS)
+- Channel subscriber count
+
+### 4. Enhanced Metadata
+- Channel name and verification badge
+- Video category and tags
+- Relevance score visualization
+- Quality score indicators
+- Learning objective highlights
+
+### 5. Interactive Elements
+- Play button overlay on thumbnail
+- Save/bookmark functionality
+- Share button with YouTube URL
+- Category assignment dropdown
+- Quick actions menu
+
+## Technical Requirements
+
+### Responsive Design
+- Mobile-first approach
+- Tablet and desktop optimizations
+- Touch-friendly interactions
+- Proper text scaling
+
+### Accessibility
+- ARIA labels for all interactive elements
+- Keyboard navigation support
+- Screen reader compatibility
+- High contrast mode support
+
+### Performance
+- Lazy loading for off-screen cards
+- Image optimization and compression
+- Minimal re-renders
+- Efficient event handling
+
+## Acceptance Criteria
+- [ ] VideoCard displays all YouTube metadata correctly
+- [ ] Thumbnails load efficiently with proper fallbacks
+- [ ] Statistics are formatted and displayed clearly
+- [ ] Component is fully responsive across devices
+- [ ] All accessibility requirements are met
+- [ ] Performance is optimized for large lists
+- [ ] Interactive elements work as expected
+
+## Testing Requirements
+- Unit tests for component rendering
+- Snapshot tests for different video types
+- Accessibility testing with screen readers
+- Performance testing with large datasets
+- Cross-browser compatibility testing
+
+## Error Handling
+- Missing thumbnail handling
+- Invalid video data graceful degradation
+- Network error scenarios
+- Malformed YouTube data responses
+
+## Future Enhancements
+- Video preview on hover
+- Advanced analytics display
+- Custom thumbnail generation
+- Video progress tracking 

@@ -1,31 +1,232 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, RefreshCw, AlertCircle, Filter, SortDesc } from 'lucide-react';
+import { Search, RefreshCw, AlertCircle, Filter, SortDesc, Loader2 } from 'lucide-react';
 import VideoCard from './VideoCard';
 import FilterPanel from './FilterPanel';
 import { useAppStore } from '../store';
 import { Button } from './ui/button';
+import { Card, CardContent } from './ui/card';
+import { Badge } from './ui/badge';
 import { cn } from '../utils/cn';
 
 // Types for enhanced filtering
 import type { 
   VideoFilters, 
   VideoSort, 
-  FilterStats 
+  FilterStats,
+  FilterResult 
 } from '../types/video-filters';
 import { VideoFilterUtils } from '../types/video-filters';
 import type { VideoUI } from '../types/video-ui';
 
+// Import the video services
+import { VideoService } from '../api/videos';
+import { VideoFilterService } from '../lib/video-filter-service';
+import type { CategoryFilteringOptions } from '../types/youtube';
+
 const SearchResults: React.FC = () => {
-  const { videos, isSearching, searchQuery } = useAppStore();
+  const { 
+    videos, 
+    isSearching, 
+    searchQuery,
+    getSelectedCategories,
+    categories,
+    userPreferences 
+  } = useAppStore();
   
   // Filter and sort state
   const [filters, setFilters] = useState<VideoFilters>({});
   const [sort, setSort] = useState<VideoSort>({ field: 'relevance', order: 'desc' });
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Integration state
+  const [filteredVideos, setFilteredVideos] = useState<VideoUI[]>([]);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
+  const [lastFilterResult, setLastFilterResult] = useState<FilterResult | null>(null);
+  
+  // Video service instance
+  const [videoService] = useState(() => new VideoService());
+  
+  // Initialize video service
+  useEffect(() => {
+    const initService = async () => {
+      try {
+        await videoService.initialize();
+      } catch (error) {
+        console.error('Failed to initialize video service:', error);
+        setFilterError('Failed to initialize video filtering service');
+      }
+    };
+    
+    if (userPreferences?.youtubeApiKey) {
+      initService();
+    }
+  }, [videoService, userPreferences?.youtubeApiKey]);
 
-  // Filter and sort videos
-  const { filteredAndSortedVideos, filterStats } = useMemo(() => {
+  // Apply filtering when filters, sort, or videos change
+  useEffect(() => {
+    applyFiltersWithAPI();
+  }, [filters, sort, videos, searchQuery]);
+
+  // Advanced filtering with YouTube API integration
+  const applyFiltersWithAPI = useCallback(async () => {
+    if (!searchQuery && videos.length === 0) {
+      setFilteredVideos([]);
+      return;
+    }
+
+    setIsFiltering(true);
+    setFilterError(null);
+    
+    try {
+      const startTime = Date.now();
+      
+      // If we have a search query and YouTube API is available, use API filtering
+      if (searchQuery && userPreferences?.youtubeApiKey) {
+        await applyAPIBasedFiltering();
+      } else {
+        // Fall back to local filtering for existing videos
+        await applyLocalFiltering();
+      }
+      
+      const processingTime = Date.now() - startTime;
+      console.log(`Filtering completed in ${processingTime}ms`);
+      
+    } catch (error) {
+      console.error('Filtering error:', error);
+      setFilterError(error instanceof Error ? error.message : 'Filtering failed');
+      // Fall back to local filtering on API error
+      await applyLocalFiltering();
+    } finally {
+      setIsFiltering(false);
+    }
+  }, [searchQuery, videos, filters, sort, userPreferences?.youtubeApiKey, videoService]);
+
+  // API-based filtering using VideoService
+  const applyAPIBasedFiltering = useCallback(async () => {
+    const selectedCategories = getSelectedCategories();
+    
+    // Convert our filters to YouTube API filters
+    const categoryFilteringOptions: CategoryFilteringOptions = {
+      maxResults: 50,
+      order: sort.field === 'publishedAt' ? 'date' : 
+             sort.field === 'viewCount' ? 'viewCount' : 'relevance',
+      autoMapCategories: true,
+      confidenceThreshold: 0.6,
+      categoryFilters: {
+        learningTubeCategories: selectedCategories.map(c => c.id),
+        duration: filters.duration ? {
+          min: filters.duration.range?.min,
+          max: filters.duration.range?.max,
+          youtubeDuration: filters.duration.preset === 'short' ? 'short' :
+                          filters.duration.preset === 'medium' ? 'medium' :
+                          filters.duration.preset === 'long' ? 'long' : 'any'
+        } : undefined,
+        uploadDate: filters.publishedDate ? {
+          after: filters.publishedDate.range?.start,
+          before: filters.publishedDate.range?.end,
+          period: filters.publishedDate.preset === 'today' ? 'today' :
+                  filters.publishedDate.preset === 'week' ? 'week' :
+                  filters.publishedDate.preset === 'month' ? 'month' :
+                  filters.publishedDate.preset === 'year' ? 'year' : undefined
+        } : undefined,
+        quality: {
+          definition: filters.quality?.includes('high') ? 'high' : 'any',
+          caption: filters.hasCaptions ? 'closedCaption' : 'any',
+        },
+        engagement: {
+          minViews: filters.viewCount?.min,
+          engagementRate: filters.minEngagementRate,
+        },
+        safeSearch: 'moderate',
+        relevanceLanguage: filters.languages?.[0] || 'en',
+      }
+    };
+
+    // Search videos with category-based filtering
+    const searchResult = await videoService.searchVideosWithCategories(
+      searchQuery || '', 
+      categoryFilteringOptions
+    );
+
+    // Convert YouTube videos to VideoUI format
+    const convertedVideos: VideoUI[] = searchResult.videos.map(video => ({
+      id: video.id?.videoId || '',
+      youtube_id: video.id?.videoId || '',
+      title: video.snippet?.title || '',
+      channelTitle: video.snippet?.channelTitle || '',
+      channel_id: video.snippet?.channelId || '',
+      thumbnailUrl: video.snippet?.thumbnails?.high?.url || 
+                   video.snippet?.thumbnails?.medium?.url || '',
+      publishedAt: video.snippet?.publishedAt || new Date().toISOString(),
+      description: video.snippet?.description || '',
+      viewCount: 0, // Would need detailed video info for this
+      duration: '', // Would need detailed video info for this
+      language: video.snippet?.defaultLanguage || 'en',
+      relevanceScore: 85, // Default high relevance for API results
+      keyPoints: [],
+      quality: 'high' as const,
+      // Add category mapping info if available
+      categories: video.categoryMapping?.suggestedLearningTubeCategories?.map(c => c.categoryId) || [],
+      tags: video.snippet?.tags || [],
+      hasCaptions: false, // Would need detailed video info
+    }));
+
+    // Apply additional local filtering for criteria not supported by API
+    let finalVideos = convertedVideos;
+    
+    if (filters.minRelevanceScore !== undefined) {
+      finalVideos = finalVideos.filter(v => v.relevanceScore >= (filters.minRelevanceScore || 0));
+    }
+    
+    if (filters.tags?.length) {
+      finalVideos = finalVideos.filter(video => 
+        video.tags && filters.tags!.some(tag => 
+          video.tags!.some(videoTag => 
+            videoTag.toLowerCase().includes(tag.toLowerCase())
+          )
+        )
+      );
+    }
+
+    // Apply sorting
+    finalVideos.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sort.field) {
+        case 'relevance':
+          comparison = a.relevanceScore - b.relevanceScore;
+          break;
+        case 'publishedAt':
+          comparison = new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime();
+          break;
+        case 'title':
+          comparison = a.title.localeCompare(b.title);
+          break;
+        default:
+          comparison = 0;
+      }
+      
+      return sort.order === 'desc' ? -comparison : comparison;
+    });
+
+    setFilteredVideos(finalVideos);
+    
+    // Create filter result for statistics
+    const filterResult: FilterResult = {
+      videos: finalVideos,
+      totalCount: searchResult.totalResults,
+      appliedFilters: filters,
+      sort: sort,
+      processingTime: 0 // Will be set by parent function
+    };
+    
+    setLastFilterResult(filterResult);
+  }, [searchQuery, filters, sort, getSelectedCategories, videoService, userPreferences]);
+
+  // Local filtering fallback
+  const applyLocalFiltering = useCallback(async () => {
     let filtered = [...videos];
 
     // Apply filters
@@ -147,25 +348,42 @@ const SearchResults: React.FC = () => {
       return sort.order === 'desc' ? -comparison : comparison;
     });
 
-    // Calculate filter statistics
-    const stats: FilterStats = {
-      totalVideos: videos.length,
-      filteredVideos: filtered.length,
-      averageRelevanceScore: filtered.length > 0 
-        ? filtered.reduce((sum, v) => sum + v.relevanceScore, 0) / filtered.length 
+    setFilteredVideos(filtered);
+    
+    // Create filter result for statistics
+    const filterResult: FilterResult = {
+      videos: filtered,
+      totalCount: filtered.length,
+      appliedFilters: filters,
+      sort: sort,
+      processingTime: 0
+    };
+    
+    setLastFilterResult(filterResult);
+  }, [videos, filters, sort]);
+
+  // Calculate filter statistics
+  const filterStats = useMemo((): FilterStats => {
+    const allVideos = videos.length > 0 ? videos : filteredVideos;
+    
+    return {
+      totalVideos: allVideos.length,
+      filteredVideos: filteredVideos.length,
+      averageRelevanceScore: filteredVideos.length > 0 
+        ? filteredVideos.reduce((sum, v) => sum + v.relevanceScore, 0) / filteredVideos.length 
         : 0,
       durationDistribution: {
-        any: videos.length,
-        short: videos.filter(v => v.duration && parseDuration(v.duration) < 240).length,
-        medium: videos.filter(v => v.duration && parseDuration(v.duration) >= 240 && parseDuration(v.duration) < 1200).length,
-        long: videos.filter(v => v.duration && parseDuration(v.duration) >= 1200).length,
+        any: allVideos.length,
+        short: allVideos.filter(v => v.duration && parseDuration(v.duration) < 240).length,
+        medium: allVideos.filter(v => v.duration && parseDuration(v.duration) >= 240 && parseDuration(v.duration) < 1200).length,
+        long: allVideos.filter(v => v.duration && parseDuration(v.duration) >= 1200).length,
         custom: 0,
       },
       qualityDistribution: {
-        excellent: videos.filter(v => v.quality === 'excellent').length,
-        high: videos.filter(v => v.quality === 'high').length,
-        medium: videos.filter(v => v.quality === 'medium').length,
-        low: videos.filter(v => v.quality === 'low').length,
+        excellent: allVideos.filter(v => v.quality === 'excellent').length,
+        high: allVideos.filter(v => v.quality === 'high').length,
+        medium: allVideos.filter(v => v.quality === 'medium').length,
+        low: allVideos.filter(v => v.quality === 'low').length,
       },
       dateDistribution: {
         today: 0, // Would need proper date calculation
@@ -175,12 +393,7 @@ const SearchResults: React.FC = () => {
         older: 0,
       },
     };
-
-    return { 
-      filteredAndSortedVideos: filtered, 
-      filterStats: stats 
-    };
-  }, [videos, filters, sort]);
+  }, [videos, filteredVideos]);
 
   // Helper function to parse duration
   const parseDuration = (duration: string): number => {
@@ -198,202 +411,157 @@ const SearchResults: React.FC = () => {
   }, []);
 
   // Get filter description for display
-  const filterDescription = useMemo(() => {
-    const hasFilters = Object.keys(filters).length > 0;
-    if (!hasFilters) return null;
+  const getFilterDescription = useCallback(() => {
+    if (!filters || Object.keys(filters).length === 0) {
+      return 'No filters applied';
+    }
     
     return VideoFilterUtils.describeFilters(filters);
   }, [filters]);
 
-  if (isSearching) {
+  // Handle refresh with current filters
+  const handleRefresh = useCallback(() => {
+    applyFiltersWithAPI();
+  }, [applyFiltersWithAPI]);
+
+  // Show loading state
+  if (isSearching || isFiltering) {
     return (
-      <div className="py-12 flex flex-col items-center justify-center">
-        <div className="relative">
-          <div className="absolute -inset-1 rounded-full bg-primary-500/30 blur-sm"></div>
-          <div className="relative bg-white rounded-full p-4">
-            <RefreshCw size={24} className="text-primary-600 animate-spin" />
-          </div>
-        </div>
-        <p className="mt-4 text-gray-600 animate-pulse">
-          Analyzing videos for "{searchQuery}"...
-        </p>
-      </div>
-    );
-  }
-  
-  if (videos.length === 0 && searchQuery) {
-    return (
-      <div className="py-12 flex flex-col items-center justify-center">
-        <div className="bg-gray-100 rounded-full p-4">
-          <AlertCircle size={24} className="text-gray-400" />
-        </div>
-        <p className="mt-4 text-gray-600">
-          No videos found for "{searchQuery}". Try a different search term.
-        </p>
-      </div>
-    );
-  }
-  
-  if (videos.length === 0) {
-    return (
-      <div className="py-12 flex flex-col items-center justify-center">
-        <div className="bg-gray-100 rounded-full p-4">
-          <Search size={24} className="text-gray-400" />
-        </div>
-        <p className="mt-4 text-gray-600">
-          Search for a topic to see curated learning videos
+      <div className="flex flex-col items-center justify-center py-12 space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-gray-600">
+          {isSearching ? 'Searching videos...' : 'Applying filters...'}
         </p>
       </div>
     );
   }
 
-  // Show filtered results with no matches
-  if (filteredAndSortedVideos.length === 0 && videos.length > 0) {
+  // Show error state
+  if (filterError) {
     return (
-      <div className="py-6">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* Header with filter controls */}
-          <div className="flex items-center justify-between mb-6">
+      <Card className="border-red-200 bg-red-50">
+        <CardContent className="p-6">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="h-6 w-6 text-red-600" />
             <div>
-              <h2 className="text-xl font-semibold">Results for "{searchQuery}"</h2>
-              <p className="text-gray-500">
-                No videos match your current filters
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className={cn(showFilters && "bg-primary/10")}
+              <h3 className="font-semibold text-red-800">Filtering Error</h3>
+              <p className="text-red-600">{filterError}</p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-2"
+                onClick={handleRefresh}
               >
-                <Filter className="h-4 w-4 mr-2" />
-                Filters
-                {Object.keys(filters).length > 0 && (
-                  <span className="ml-1 bg-primary/20 text-xs px-1.5 py-0.5 rounded-full">
-                    {Object.keys(filters).length}
-                  </span>
-                )}
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
               </Button>
             </div>
           </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
-          {/* Filter Panel */}
-          {showFilters && (
-            <div className="mb-6">
-              <FilterPanel
-                variant="panel"
-                onFiltersChange={handleFiltersChange}
-                resultCount={filteredAndSortedVideos.length}
-                filterStats={filterStats}
-              />
-            </div>
-          )}
-
-          {/* No results state */}
-          <div className="text-center py-12">
-            <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No videos match your filters</h3>
-            <p className="text-gray-500 mb-4">
-              Try adjusting your filters or search criteria
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setFilters({});
-                setSort({ field: 'relevance', order: 'desc' });
-              }}
-            >
-              Clear All Filters
-            </Button>
-          </div>
-        </motion.div>
+  // Show empty state
+  if (filteredVideos.length === 0 && !isSearching) {
+    return (
+      <div className="text-center py-12">
+        <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-700 mb-2">
+          {searchQuery ? 'No videos found' : 'Start searching for videos'}
+        </h3>
+        <p className="text-gray-500 mb-4">
+          {searchQuery 
+            ? 'Try adjusting your filters or search terms'
+            : 'Enter a search query to find educational content'
+          }
+        </p>
+        {Object.keys(filters).length > 0 && (
+          <Button variant="outline" onClick={() => setFilters({})}>
+            Clear Filters
+          </Button>
+        )}
       </div>
     );
   }
-  
+
   return (
-    <div className="py-6">
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-      >
-        {/* Header with filter controls */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold">Results for "{searchQuery}"</h2>
-            <div className="flex items-center gap-2 text-gray-500">
-              <span>
-                Found {filteredAndSortedVideos.length} videos
-                {filteredAndSortedVideos.length !== videos.length && 
-                  ` (filtered from ${videos.length} total)`
-                } ranked by {sort.field}
-              </span>
-              {filterDescription && (
-                <>
-                  <span>•</span>
-                  <span className="text-sm">{filterDescription}</span>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              className={cn(showFilters && "bg-primary/10")}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filters
-              {Object.keys(filters).length > 0 && (
-                <span className="ml-1 bg-primary/20 text-xs px-1.5 py-0.5 rounded-full">
-                  {Object.keys(filters).length}
-                </span>
-              )}
-            </Button>
-            <div className="flex items-center text-sm text-gray-500">
-              <SortDesc className="h-4 w-4 mr-1" />
-              <span className="capitalize">
-                {sort.field} ({sort.order === 'desc' ? 'high to low' : 'low to high'})
-              </span>
-            </div>
-          </div>
+    <div className="space-y-6">
+      {/* Filter controls and results summary */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(showFilters && "bg-blue-50 border-blue-300")}
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filters
+            {Object.keys(filters).length > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                {Object.keys(filters).length}
+              </Badge>
+            )}
+          </Button>
+          
+          <Button variant="outline" size="sm" onClick={handleRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
         </div>
-
-        {/* Filter Panel */}
-        {showFilters && (
-          <div className="mb-6">
-            <FilterPanel
-              variant="panel"
-              onFiltersChange={handleFiltersChange}
-              resultCount={filteredAndSortedVideos.length}
-              filterStats={filterStats}
-            />
-          </div>
-        )}
-
-        {/* Video Results */}
-        <div className="space-y-4">
-          {filteredAndSortedVideos.map((video, index) => (
-            <VideoCard key={video.id} video={video} index={index} />
-          ))}
+        
+        <div className="flex items-center space-x-4 text-sm text-gray-600">
+          <span>
+            {filteredVideos.length} of {filterStats.totalVideos} videos
+          </span>
+          {lastFilterResult && (
+            <Badge variant="outline">
+              {lastFilterResult.processingTime}ms
+            </Badge>
+          )}
         </div>
+      </div>
 
-        {/* Load More / Pagination placeholder */}
-        {filteredAndSortedVideos.length >= 20 && (
-          <div className="mt-8 text-center">
-            <Button variant="outline">
-              Load More Videos
-            </Button>
-          </div>
-        )}
-      </motion.div>
+      {/* Filter description */}
+      {Object.keys(filters).length > 0 && (
+        <Card className="bg-blue-50 border-blue-200">
+          <CardContent className="p-3">
+            <p className="text-sm text-blue-700">
+              <strong>Active filters:</strong> {getFilterDescription()}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Filter panel */}
+      {showFilters && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <FilterPanel 
+            onFiltersChange={handleFiltersChange}
+            resultCount={filteredVideos.length}
+            filterStats={filterStats}
+            variant="panel"
+          />
+        </motion.div>
+      )}
+
+      {/* Video grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filteredVideos.map((video) => (
+          <VideoCard
+            key={video.id}
+            video={video}
+            showRelevanceScore={true}
+            showCategoryInfo={true}
+          />
+        ))}
+      </div>
     </div>
   );
 };

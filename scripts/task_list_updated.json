@@ -205,7 +205,75 @@
       "phase": "API Integration", 
       "component_integration": "src/pages/Settings.tsx",
       "files_to_modify": ["src/pages/Settings.tsx", "src/components/ApiKeySetup.tsx", "src/api/auth.ts"],
-      "task_file": "tasks/task_006.txt"
+      "task_file": "tasks/task_006.txt",
+      "subtasks": [
+        {
+          "id": "TASK_006_001",
+          "title": "Create ApiKeySetup component foundation",
+          "description": "Build the basic ApiKeySetup component with form layout, input fields, and validation using shadcn/ui components",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_005"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/ApiKeySetup.tsx"],
+          "task_file": "tasks/task_006_001.txt"
+        },
+        {
+          "id": "TASK_006_002",
+          "title": "Implement API key validation",
+          "description": "Add client-side and server-side validation for YouTube API keys with real-time testing and feedback",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_006_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/api-key-validator.ts", "src/components/ApiKeySetup.tsx"],
+          "task_file": "tasks/task_006_002.txt"
+        },
+        {
+          "id": "TASK_006_003",
+          "title": "Implement secure API key storage",
+          "description": "Create encrypted storage system for API keys using Supabase with proper encryption and access controls",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_006_001", "TASK_012"],
+          "complexity": 5,
+          "files_to_modify": ["src/api/api-keys.ts", "src/lib/encryption.ts"],
+          "task_file": "tasks/task_006_003.txt"
+        },
+        {
+          "id": "TASK_006_004",
+          "title": "Add API key usage monitoring",
+          "description": "Implement quota tracking and usage monitoring for API keys with visual feedback and alerts",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_006_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/ApiUsageMonitor.tsx", "src/lib/quota-tracker.ts"],
+          "task_file": "tasks/task_006_004.txt"
+        },
+        {
+          "id": "TASK_006_005",
+          "title": "Integrate ApiKeySetup into Settings page",
+          "description": "Add ApiKeySetup component to existing Settings page with proper navigation and responsive layout",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_006_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/pages/Settings.tsx"],
+          "task_file": "tasks/task_006_005.txt"
+        },
+        {
+          "id": "TASK_006_006",
+          "title": "Add API key backup and recovery",
+          "description": "Implement API key backup, export, and recovery functionality with security measures and user guidance",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_006_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/ApiKeyBackup.tsx", "src/lib/key-backup.ts"],
+          "task_file": "tasks/task_006_006.txt"
+        }
+      ]
     },
     {
       "id": "TASK_007",
@@ -314,7 +382,7 @@
       "id": "TASK_008",
       "title": "Connect category-based video fetching to existing UI",
       "description": "Integrate YouTube API results with existing SearchResults and VideoCard components",
-      "status": "Not Started",
+      "status": "In Progress",
       "priority": "High",
       "dependencies": ["TASK_007", "TASK_004"],
       "complexity": 6,
@@ -340,13 +408,70 @@
         {
           "id": "TASK_008_002",
           "title": "Implement advanced video filtering and sorting",
-          "description": "Add filters for duration, date, quality score, and custom sorting options integrated with Supabase queries",
-          "status": "Not Started",
+          "description": "Add filters for duration, date, quality score, and custom sorting options integrated with YouTube API",
+          "status": "Completed",
           "priority": "Low",
           "dependencies": ["TASK_008_001"],
           "complexity": 5,
-          "files_to_modify": ["src/components/FilterPanel.tsx", "src/components/SearchResults.tsx"],
-          "task_file": "tasks/task_008_002.txt"
+          "files_to_modify": ["src/components/FilterPanel.tsx", "src/components/SearchResults.tsx", "src/components/IntegratedVideoSearch.tsx"],
+          "files_modified": ["src/types/video-filters.ts", "src/components/FilterPanel.tsx", "src/components/SearchResults.tsx", "src/components/IntegratedVideoSearch.tsx"],
+          "task_file": "tasks/task_008_002.txt",
+          "completion_notes": "Created comprehensive video filtering system with YouTube API integration. FilterPanel provides advanced filtering UI, SearchResults handles local filtering, and IntegratedVideoSearch combines both with API-based filtering using VideoService. Supports duration, date, quality, engagement, and category-based filtering with real-time statistics and performance metrics."
+        },
+        {
+          "id": "TASK_008_003",
+          "title": "Integrate YouTube API with SearchResults component",
+          "description": "Connect YouTube Data API service to SearchResults component with proper state management, loading states, and error handling",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_008_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/components/SearchResults.tsx", "src/hooks/useVideoSearch.ts"],
+          "task_file": "tasks/task_008_003.txt"
+        },
+        {
+          "id": "TASK_008_004",
+          "title": "Update VideoCard for YouTube API data",
+          "description": "Modify VideoCard component to properly display YouTube API video data with thumbnails, statistics, and metadata",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_008_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/VideoCard.tsx"],
+          "task_file": "tasks/task_008_004.txt"
+        },
+        {
+          "id": "TASK_008_005",
+          "title": "Implement category-based search integration",
+          "description": "Connect category selector to video search functionality with proper keyword mapping and search query generation",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_008_003", "TASK_004"],
+          "complexity": 4,
+          "files_to_modify": ["src/pages/Home.tsx", "src/hooks/useCategorySearch.ts"],
+          "task_file": "tasks/task_008_005.txt"
+        },
+        {
+          "id": "TASK_008_006",
+          "title": "Add pagination and infinite scroll",
+          "description": "Implement pagination for YouTube API results with infinite scroll UI pattern and proper performance optimization",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_008_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/SearchResults.tsx", "src/hooks/useInfiniteScroll.ts"],
+          "task_file": "tasks/task_008_006.txt"
+        },
+        {
+          "id": "TASK_008_007",
+          "title": "Implement search result caching",
+          "description": "Add client-side caching for YouTube API results to reduce API calls and improve performance",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_008_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/search-cache.ts", "src/hooks/useVideoSearch.ts"],
+          "task_file": "tasks/task_008_007.txt"
         }
       ]
     },
@@ -354,27 +479,152 @@
       "id": "TASK_009",
       "title": "Implement transcript extraction service", 
       "description": "Create client-side service for extracting YouTube video transcripts using youtube-transcript-api or similar",
-      "status": "Not Started",
+      "status": "Completed",
       "priority": "Medium",
       "dependencies": ["TASK_007"],
       "complexity": 7,
       "phase": "Intelligence",
       "component_integration": "Client-side transcript service",
       "files_to_modify": ["src/lib/transcript-extractor.ts", "src/api/videos.ts"],
-      "task_file": "tasks/task_009.txt"
+      "task_file": "tasks/task_009.txt",
+      "subtasks": [
+        {
+          "id": "TASK_009_001",
+          "title": "Research and setup transcript extraction library",
+          "description": "Evaluate and integrate youtube-transcript-api or alternative libraries for client-side transcript extraction",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_007"],
+          "complexity": 3,
+          "files_to_modify": ["package.json", "src/lib/transcript-extractor.ts"],
+          "task_file": "tasks/task_009_001.txt"
+        },
+        {
+          "id": "TASK_009_002",
+          "title": "Create transcript extractor service foundation",
+          "description": "Build core transcript extraction service with error handling, retry logic, and proper TypeScript typing",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_009_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/transcript-extractor.ts", "src/types/transcript.ts"],
+          "task_file": "tasks/task_009_002.txt"
+        },
+        {
+          "id": "TASK_009_003",
+          "title": "Implement transcript caching and storage",
+          "description": "Add caching mechanism for extracted transcripts using Supabase storage to reduce API calls and improve performance",
+          "status": "Completed",
+          "priority": "Medium",
+          "dependencies": ["TASK_009_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/transcript-cache.ts", "src/api/videos.ts"],
+          "task_file": "tasks/task_009_003.txt"
+        },
+        {
+          "id": "TASK_009_004",
+          "title": "Add transcript format processing",
+          "description": "Process and format extracted transcripts for analysis, including timestamp handling and text cleaning",
+          "status": "Completed",
+          "priority": "Medium",
+          "dependencies": ["TASK_009_002"],
+          "complexity": 2,
+          "files_to_modify": ["src/lib/transcript-processor.ts"],
+          "task_file": "tasks/task_009_004.txt"
+        },
+        {
+          "id": "TASK_009_005",
+          "title": "Integrate transcript service with video API",
+          "description": "Connect transcript extraction to existing video API endpoints with proper error handling and fallbacks",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_009_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/api/videos.ts", "src/lib/transcript-extractor.ts"],
+          "task_file": "tasks/task_009_005.txt"
+        }
+      ]
     },
     {
       "id": "TASK_010",
       "title": "Set up OpenAI API integration for content analysis",
       "description": "Create AI analysis service for video transcript processing and relevance scoring using OpenAI API",
-      "status": "Not Started",
+      "status": "Completed",
       "priority": "Medium", 
       "dependencies": ["TASK_009"],
       "complexity": 8,
       "phase": "Intelligence",
       "component_integration": "Client-side AI service + existing relevance scoring",
       "files_to_modify": ["src/lib/openai-analysis.ts", "src/api/videos.ts"],
-      "task_file": "tasks/task_010.txt"
+      "task_file": "tasks/task_010.txt",
+      "subtasks": [
+        {
+          "id": "TASK_010_001",
+          "title": "Setup OpenAI client and authentication",
+          "description": "Configure OpenAI API client with proper authentication, error handling, and rate limiting",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_009"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/openai-client.ts", "src/types/openai.ts"],
+          "task_file": "tasks/task_010_001.txt"
+        },
+        {
+          "id": "TASK_010_002",
+          "title": "Implement transcript analysis service",
+          "description": "Create service to analyze video transcripts for relevance, quality, and category matching using OpenAI",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_010_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/transcript-analyzer.ts", "src/types/analysis.ts"],
+          "task_file": "tasks/task_010_002.txt"
+        },
+        {
+          "id": "TASK_010_003",
+          "title": "Create relevance scoring algorithm",
+          "description": "Develop intelligent relevance scoring system combining AI analysis with category matching and user preferences",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_010_002"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/relevance-scorer.ts", "src/types/scoring.ts"],
+          "task_file": "tasks/task_010_003.txt"
+        },
+        {
+          "id": "TASK_010_004",
+          "title": "Implement content insights generation",
+          "description": "Generate AI-powered insights about video content including summaries, key topics, and learning objectives",
+          "status": "Completed",
+          "priority": "Medium",
+          "dependencies": ["TASK_010_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/content-insights.ts"],
+          "task_file": "tasks/task_010_004.txt"
+        },
+        {
+          "id": "TASK_010_005",
+          "title": "Add AI analysis caching and optimization",
+          "description": "Implement caching for AI analysis results and optimize API usage to reduce costs and improve performance",
+          "status": "Completed",
+          "priority": "Medium",
+          "dependencies": ["TASK_010_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/analysis-cache.ts", "src/api/videos.ts"],
+          "task_file": "tasks/task_010_005.txt"
+        },
+        {
+          "id": "TASK_010_006",
+          "title": "Integrate OpenAI analysis with video API",
+          "description": "Connect OpenAI analysis service to video API endpoints with proper error handling and fallbacks",
+          "status": "Completed",
+          "priority": "High",
+          "dependencies": ["TASK_010_005"],
+          "complexity": 3,
+          "files_to_modify": ["src/api/videos.ts", "src/lib/openai-analysis.ts"],
+          "task_file": "tasks/task_010_006.txt"
+        }
+      ]
     },
     {
       "id": "TASK_011",
@@ -400,7 +650,64 @@
       "phase": "Persistence",
       "component_integration": "Database backend",
       "files_to_modify": ["src/lib/supabase.ts", "src/types/supabase.ts", "database/schema.sql"],
-      "task_file": "tasks/task_012.txt"
+      "task_file": "tasks/task_012.txt",
+      "subtasks": [
+        {
+          "id": "TASK_012_001",
+          "title": "Create Supabase project and initial configuration",
+          "description": "Set up Supabase project, configure environment variables, and establish connection testing",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_001"],
+          "complexity": 2,
+          "files_to_modify": ["src/lib/supabase.ts", ".env.example"],
+          "task_file": "tasks/task_012_001.txt"
+        },
+        {
+          "id": "TASK_012_002",
+          "title": "Design and create core database tables",
+          "description": "Create tables for users, categories, videos, and analysis data with proper relationships and constraints",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_012_001"],
+          "complexity": 4,
+          "files_to_modify": ["database/schema.sql", "src/types/supabase.ts"],
+          "task_file": "tasks/task_012_002.txt"
+        },
+        {
+          "id": "TASK_012_003",
+          "title": "Implement Row Level Security policies",
+          "description": "Set up comprehensive RLS policies for data access control and user privacy protection",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_012_002"],
+          "complexity": 3,
+          "files_to_modify": ["database/rls-policies.sql"],
+          "task_file": "tasks/task_012_003.txt"
+        },
+        {
+          "id": "TASK_012_004",
+          "title": "Create database functions and triggers",
+          "description": "Implement stored functions for complex operations and triggers for data integrity and automation",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_012_002"],
+          "complexity": 3,
+          "files_to_modify": ["database/functions.sql", "database/triggers.sql"],
+          "task_file": "tasks/task_012_004.txt"
+        },
+        {
+          "id": "TASK_012_005",
+          "title": "Generate TypeScript types from database schema",
+          "description": "Use Supabase CLI to generate TypeScript types and interfaces from the database schema",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_012_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/types/supabase.ts", "package.json"],
+          "task_file": "tasks/task_012_005.txt"
+        }
+      ]
     },
     {
       "id": "TASK_013",
@@ -413,7 +720,75 @@
       "phase": "Persistence",
       "component_integration": "New auth components + existing Settings",
       "files_to_modify": ["src/components/Auth.tsx", "src/api/auth.ts", "src/store/index.ts"],
-      "task_file": "tasks/task_013.txt"
+      "task_file": "tasks/task_013.txt",
+      "subtasks": [
+        {
+          "id": "TASK_013_001",
+          "title": "Setup Supabase Auth configuration",
+          "description": "Configure Supabase Auth settings, email templates, and authentication providers",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_012"],
+          "complexity": 2,
+          "files_to_modify": ["src/api/auth.ts", "src/lib/supabase.ts"],
+          "task_file": "tasks/task_013_001.txt"
+        },
+        {
+          "id": "TASK_013_002",
+          "title": "Create authentication UI components",
+          "description": "Build login, signup, and password reset forms using shadcn/ui components with validation",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_013_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/components/Auth.tsx", "src/components/ui/LoginForm.tsx", "src/components/ui/SignupForm.tsx"],
+          "task_file": "tasks/task_013_002.txt"
+        },
+        {
+          "id": "TASK_013_003",
+          "title": "Implement session management",
+          "description": "Add session handling, automatic token refresh, and user state persistence across app reloads",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_013_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/store/index.ts", "src/hooks/useAuth.ts"],
+          "task_file": "tasks/task_013_003.txt"
+        },
+        {
+          "id": "TASK_013_004",
+          "title": "Create protected route system",
+          "description": "Implement route protection, authentication guards, and redirect logic for protected pages",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_013_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/ProtectedRoute.tsx", "src/router/index.tsx"],
+          "task_file": "tasks/task_013_004.txt"
+        },
+        {
+          "id": "TASK_013_005",
+          "title": "Add user profile management",
+          "description": "Create user profile editing, avatar upload, and account management features",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_013_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/UserProfile.tsx", "src/pages/Profile.tsx"],
+          "task_file": "tasks/task_013_005.txt"
+        },
+        {
+          "id": "TASK_013_006",
+          "title": "Migrate from localStorage to user-based storage",
+          "description": "Replace localStorage persistence with user-specific database storage for categories and preferences",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_013_003"],
+          "complexity": 4,
+          "files_to_modify": ["src/store/index.ts", "src/api/categories.ts"],
+          "task_file": "tasks/task_013_006.txt"
+        }
+      ]
     },
     {
       "id": "TASK_014",
@@ -426,7 +801,64 @@
       "phase": "Persistence",
       "component_integration": "src/store/index.ts + CategoryManager",
       "files_to_modify": ["src/store/index.ts", "src/api/categories.ts"],
-      "task_file": "tasks/task_014.txt"
+      "task_file": "tasks/task_014.txt",
+      "subtasks": [
+        {
+          "id": "TASK_014_001",
+          "title": "Create category database API layer",
+          "description": "Implement CRUD operations for categories using Supabase client with proper error handling",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_013"],
+          "complexity": 3,
+          "files_to_modify": ["src/api/categories.ts"],
+          "task_file": "tasks/task_014_001.txt"
+        },
+        {
+          "id": "TASK_014_002",
+          "title": "Update Zustand store for database integration",
+          "description": "Modify category store actions to use Supabase API instead of localStorage with async state management",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_014_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/store/index.ts"],
+          "task_file": "tasks/task_014_002.txt"
+        },
+        {
+          "id": "TASK_014_003",
+          "title": "Implement data migration from localStorage",
+          "description": "Create migration utility to transfer existing localStorage categories to user's database account",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_014_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/category-migration.ts", "src/components/DataMigration.tsx"],
+          "task_file": "tasks/task_014_003.txt"
+        },
+        {
+          "id": "TASK_014_004",
+          "title": "Add real-time category sync",
+          "description": "Implement real-time synchronization for category changes using Supabase realtime subscriptions",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_014_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/hooks/useCategorySync.ts", "src/store/index.ts"],
+          "task_file": "tasks/task_014_004.txt"
+        },
+        {
+          "id": "TASK_014_005",
+          "title": "Update CategoryManager for database operations",
+          "description": "Modify CategoryManager component to work with async database operations and loading states",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_014_002", "TASK_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/components/CategoryManager.tsx"],
+          "task_file": "tasks/task_014_005.txt"
+        }
+      ]
     },
     {
       "id": "TASK_015",
@@ -439,7 +871,75 @@
       "phase": "Persistence",
       "component_integration": "Backend security + Settings UI",
       "files_to_modify": ["src/lib/encryption.ts", "src/api/auth.ts"],
-      "task_file": "tasks/task_015.txt"
+      "task_file": "tasks/task_015.txt",
+      "subtasks": [
+        {
+          "id": "TASK_015_001",
+          "title": "Implement client-side encryption library",
+          "description": "Create secure encryption utilities using Web Crypto API for client-side key encryption before storage",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_013"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/encryption.ts", "src/types/encryption.ts"],
+          "task_file": "tasks/task_015_001.txt"
+        },
+        {
+          "id": "TASK_015_002",
+          "title": "Create secure key storage API",
+          "description": "Implement encrypted API key storage and retrieval using Supabase with proper access controls",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_015_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/api/secure-storage.ts", "src/api/auth.ts"],
+          "task_file": "tasks/task_015_002.txt"
+        },
+        {
+          "id": "TASK_015_003",
+          "title": "Implement key derivation and management",
+          "description": "Create secure key derivation system using user credentials and secure random generation",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_015_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/key-derivation.ts", "src/lib/encryption.ts"],
+          "task_file": "tasks/task_015_003.txt"
+        },
+        {
+          "id": "TASK_015_004",
+          "title": "Add key rotation and recovery mechanisms",
+          "description": "Implement automatic key rotation and secure recovery options for encrypted API keys",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_015_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/key-rotation.ts", "src/components/KeyRecovery.tsx"],
+          "task_file": "tasks/task_015_004.txt"
+        },
+        {
+          "id": "TASK_015_005",
+          "title": "Integrate encryption with API key management",
+          "description": "Connect encryption system to existing API key management UI with transparent encryption/decryption",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_015_002", "TASK_006"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/ApiKeySetup.tsx", "src/api/secure-storage.ts"],
+          "task_file": "tasks/task_015_005.txt"
+        },
+        {
+          "id": "TASK_015_006",
+          "title": "Add security audit and logging",
+          "description": "Implement security event logging and audit trail for API key access and modifications",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_015_005"],
+          "complexity": 2,
+          "files_to_modify": ["src/lib/security-audit.ts", "src/api/audit-log.ts"],
+          "task_file": "tasks/task_015_006.txt"
+        }
+      ]
     },
     {
       "id": "TASK_016",
@@ -452,7 +952,64 @@
       "phase": "Optimization",
       "component_integration": "Backend caching + existing video display",
       "files_to_modify": ["src/lib/video-cache.ts", "src/api/videos.ts"],
-      "task_file": "tasks/task_016.txt"
+      "task_file": "tasks/task_016.txt",
+      "subtasks": [
+        {
+          "id": "TASK_016_001",
+          "title": "Design caching strategy and data structure",
+          "description": "Design intelligent caching system for videos, search results, and metadata with TTL and invalidation strategies",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_014"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/cache-strategy.ts", "src/types/cache.ts"],
+          "task_file": "tasks/task_016_001.txt"
+        },
+        {
+          "id": "TASK_016_002",
+          "title": "Implement video metadata caching",
+          "description": "Create caching layer for YouTube video metadata to reduce API calls and improve response times",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_016_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/video-cache.ts", "src/api/videos.ts"],
+          "task_file": "tasks/task_016_002.txt"
+        },
+        {
+          "id": "TASK_016_003",
+          "title": "Add search result caching",
+          "description": "Implement caching for search queries and results with smart cache key generation and partial matching",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_016_001", "TASK_008"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/search-cache.ts", "src/hooks/useVideoSearch.ts"],
+          "task_file": "tasks/task_016_003.txt"
+        },
+        {
+          "id": "TASK_016_004",
+          "title": "Implement video deduplication system",
+          "description": "Create deduplication logic to identify and merge duplicate videos across different searches and categories",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_016_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/video-deduplication.ts", "src/api/videos.ts"],
+          "task_file": "tasks/task_016_004.txt"
+        },
+        {
+          "id": "TASK_016_005",
+          "title": "Add cache management and cleanup",
+          "description": "Implement cache size management, automatic cleanup, and cache statistics with user controls",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_016_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/lib/cache-manager.ts", "src/components/CacheSettings.tsx"],
+          "task_file": "tasks/task_016_005.txt"
+        }
+      ]
     },
     {
       "id": "TASK_017",
@@ -465,7 +1022,64 @@
       "phase": "Optimization",
       "component_integration": "src/pages/Settings.tsx + new analytics components",
       "files_to_modify": ["src/components/UsageAnalytics.tsx", "src/api/analytics.ts"],
-      "task_file": "tasks/task_017.txt"
+      "task_file": "tasks/task_017.txt",
+      "subtasks": [
+        {
+          "id": "TASK_017_001",
+          "title": "Create usage tracking system",
+          "description": "Implement comprehensive tracking for YouTube API and OpenAI API usage with detailed metrics collection",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_015"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/usage-tracker.ts", "src/api/analytics.ts"],
+          "task_file": "tasks/task_017_001.txt"
+        },
+        {
+          "id": "TASK_017_002",
+          "title": "Design analytics dashboard UI",
+          "description": "Create comprehensive analytics dashboard showing API usage, costs, quotas, and trends using charts and graphs",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_017_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/components/UsageAnalytics.tsx", "src/components/ui/UsageCharts.tsx"],
+          "task_file": "tasks/task_017_002.txt"
+        },
+        {
+          "id": "TASK_017_003",
+          "title": "Implement quota monitoring and alerts",
+          "description": "Add real-time quota monitoring with customizable alerts and automatic throttling when approaching limits",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_017_001", "TASK_010"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/quota-monitor.ts", "src/components/QuotaAlerts.tsx"],
+          "task_file": "tasks/task_017_003.txt"
+        },
+        {
+          "id": "TASK_017_004",
+          "title": "Add cost optimization suggestions",
+          "description": "Implement intelligent cost optimization recommendations based on usage patterns and API pricing",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_017_002"],
+          "complexity": 2,
+          "files_to_modify": ["src/lib/cost-optimizer.ts", "src/components/OptimizationSuggestions.tsx"],
+          "task_file": "tasks/task_017_004.txt"
+        },
+        {
+          "id": "TASK_017_005",
+          "title": "Integrate analytics into Settings page",
+          "description": "Add usage analytics and quota monitoring to existing Settings page with proper navigation and layout",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_017_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/pages/Settings.tsx"],
+          "task_file": "tasks/task_017_005.txt"
+        }
+      ]
     },
     {
       "id": "TASK_018",
@@ -491,7 +1105,75 @@
       "phase": "Advanced Features",
       "component_integration": "src/components/CategoryManager.tsx",
       "files_to_modify": ["src/components/CategoryManager.tsx", "src/api/categories.ts"],
-      "task_file": "tasks/task_019.txt"
+      "task_file": "tasks/task_019.txt",
+      "subtasks": [
+        {
+          "id": "TASK_019_001",
+          "title": "Create predefined category templates",
+          "description": "Design and implement a collection of predefined category templates for common learning topics and subjects",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_014"],
+          "complexity": 2,
+          "files_to_modify": ["src/data/category-templates.ts", "src/types/templates.ts"],
+          "task_file": "tasks/task_019_001.txt"
+        },
+        {
+          "id": "TASK_019_002",
+          "title": "Implement category export functionality",
+          "description": "Create category export system allowing users to export their categories in JSON format with proper data sanitization",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_019_001"],
+          "complexity": 2,
+          "files_to_modify": ["src/lib/category-export.ts", "src/components/ExportCategories.tsx"],
+          "task_file": "tasks/task_019_002.txt"
+        },
+        {
+          "id": "TASK_019_003",
+          "title": "Implement category import functionality",
+          "description": "Create category import system with validation, conflict resolution, and merge strategies for imported categories",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_019_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/category-import.ts", "src/components/ImportCategories.tsx"],
+          "task_file": "tasks/task_019_003.txt"
+        },
+        {
+          "id": "TASK_019_004",
+          "title": "Create template browser and selector",
+          "description": "Build UI for browsing, previewing, and selecting category templates with search and filtering capabilities",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_019_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/TemplateBrowser.tsx", "src/components/TemplatePreview.tsx"],
+          "task_file": "tasks/task_019_004.txt"
+        },
+        {
+          "id": "TASK_019_005",
+          "title": "Add community sharing features",
+          "description": "Implement community category sharing system allowing users to publish and discover category templates",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_019_003"],
+          "complexity": 4,
+          "files_to_modify": ["src/api/community-categories.ts", "src/components/CommunityTemplates.tsx"],
+          "task_file": "tasks/task_019_005.txt"
+        },
+        {
+          "id": "TASK_019_006",
+          "title": "Integrate templates into CategoryManager",
+          "description": "Add template browser, import/export functionality to existing CategoryManager component with proper UI integration",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_019_004"],
+          "complexity": 2,
+          "files_to_modify": ["src/components/CategoryManager.tsx"],
+          "task_file": "tasks/task_019_006.txt"
+        }
+      ]
     },
     {
       "id": "TASK_020",
@@ -530,7 +1212,75 @@
       "phase": "Production Polish",
       "component_integration": "New onboarding components + existing flows",
       "files_to_modify": ["src/components/Onboarding.tsx", "src/pages/onboarding.tsx"],
-      "task_file": "tasks/task_022.txt"
+      "task_file": "tasks/task_022.txt",
+      "subtasks": [
+        {
+          "id": "TASK_022_001",
+          "title": "Design onboarding flow and steps",
+          "description": "Design comprehensive onboarding flow with step-by-step guidance for new users including wireframes and user journey",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_006"],
+          "complexity": 2,
+          "files_to_modify": ["src/types/onboarding.ts", "src/data/onboarding-steps.ts"],
+          "task_file": "tasks/task_022_001.txt"
+        },
+        {
+          "id": "TASK_022_002",
+          "title": "Create onboarding wizard component",
+          "description": "Build main onboarding wizard component with step navigation, progress tracking, and responsive design",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_022_001"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/Onboarding.tsx", "src/components/ui/OnboardingWizard.tsx"],
+          "task_file": "tasks/task_022_002.txt"
+        },
+        {
+          "id": "TASK_022_003",
+          "title": "Implement account setup step",
+          "description": "Create account setup step integrating with Supabase authentication and profile creation",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_022_002", "TASK_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/onboarding/AccountSetup.tsx"],
+          "task_file": "tasks/task_022_003.txt"
+        },
+        {
+          "id": "TASK_022_004",
+          "title": "Implement API key configuration step",
+          "description": "Create guided API key setup step with validation, testing, and helpful instructions for obtaining keys",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_022_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/onboarding/ApiKeySetup.tsx"],
+          "task_file": "tasks/task_022_004.txt"
+        },
+        {
+          "id": "TASK_022_005",
+          "title": "Implement category creation tutorial",
+          "description": "Create interactive tutorial for creating first categories with templates and guided examples",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_022_003"],
+          "complexity": 2,
+          "files_to_modify": ["src/components/onboarding/CategoryTutorial.tsx"],
+          "task_file": "tasks/task_022_005.txt"
+        },
+        {
+          "id": "TASK_022_006",
+          "title": "Add onboarding completion and first search",
+          "description": "Implement onboarding completion step with congratulations and guided first search experience",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_022_005"],
+          "complexity": 2,
+          "files_to_modify": ["src/components/onboarding/OnboardingComplete.tsx", "src/pages/onboarding.tsx"],
+          "task_file": "tasks/task_022_006.txt"
+        }
+      ]
     },
     {
       "id": "TASK_023",
@@ -543,7 +1293,86 @@
       "phase": "Optimization",
       "component_integration": "Client-side batch processing + UI progress indicators",
       "files_to_modify": ["src/lib/batch-processor.ts", "src/api/videos.ts", "src/components/ProcessingStatus.tsx"],
-      "task_file": "tasks/task_023.txt"
+      "task_file": "tasks/task_023.txt",
+      "subtasks": [
+        {
+          "id": "TASK_023_001",
+          "title": "Design batch processing architecture",
+          "description": "Design scalable batch processing system with queue management, worker threads, and resource optimization strategies",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_016"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/batch-architecture.ts", "src/types/batch-processing.ts"],
+          "task_file": "tasks/task_023_001.txt"
+        },
+        {
+          "id": "TASK_023_002",
+          "title": "Implement batch job queue system",
+          "description": "Create job queue management with prioritization, retry logic, and concurrent processing capabilities",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_023_001"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/job-queue.ts", "src/lib/batch-processor.ts"],
+          "task_file": "tasks/task_023_002.txt"
+        },
+        {
+          "id": "TASK_023_003",
+          "title": "Create video analysis batch processor",
+          "description": "Implement batch processor for video analysis using AI services with proper rate limiting and error handling",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_023_002", "TASK_010"],
+          "complexity": 4,
+          "files_to_modify": ["src/lib/video-batch-analyzer.ts", "src/api/videos.ts"],
+          "task_file": "tasks/task_023_003.txt"
+        },
+        {
+          "id": "TASK_023_004",
+          "title": "Implement progress tracking and monitoring",
+          "description": "Create comprehensive progress tracking system with real-time updates, ETA calculation, and detailed status reporting",
+          "status": "Not Started",
+          "priority": "High",
+          "dependencies": ["TASK_023_002"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/progress-tracker.ts", "src/components/ProcessingStatus.tsx"],
+          "task_file": "tasks/task_023_004.txt"
+        },
+        {
+          "id": "TASK_023_005",
+          "title": "Add batch processing UI controls",
+          "description": "Create user interface for managing batch jobs including start, pause, resume, cancel, and priority adjustment",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_023_004"],
+          "complexity": 3,
+          "files_to_modify": ["src/components/BatchProcessingControls.tsx", "src/components/JobQueueManager.tsx"],
+          "task_file": "tasks/task_023_005.txt"
+        },
+        {
+          "id": "TASK_023_006",
+          "title": "Implement resource management and optimization",
+          "description": "Add intelligent resource management to optimize CPU, memory, and API usage during batch processing",
+          "status": "Not Started",
+          "priority": "Medium",
+          "dependencies": ["TASK_023_003"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/resource-manager.ts", "src/lib/batch-optimizer.ts"],
+          "task_file": "tasks/task_023_006.txt"
+        },
+        {
+          "id": "TASK_023_007",
+          "title": "Add batch processing persistence and recovery",
+          "description": "Implement job persistence and recovery mechanisms to handle browser reloads and crashes during processing",
+          "status": "Not Started",
+          "priority": "Low",
+          "dependencies": ["TASK_023_005"],
+          "complexity": 3,
+          "files_to_modify": ["src/lib/batch-persistence.ts", "src/lib/job-recovery.ts"],
+          "task_file": "tasks/task_023_007.txt"
+        }
+      ]
     },
     {
       "id": "TASK_024",
