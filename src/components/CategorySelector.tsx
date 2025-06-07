@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, FolderOpen, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAppStore } from '../store';
+import { useCategoriesStore } from '../store/categories';
 import { Category, CategoryId } from '../types';
 import { cn } from '../lib/utils';
 import { Button } from './ui/button';
@@ -74,22 +74,22 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
 }) => {
   const { 
     categories, 
-    activeCategoryId,
-    setActiveCategory,
-    categoriesLoading,
-    getActiveCategory
-  } = useAppStore();
+    selectedCategory,
+    selectCategory,
+    isLoading: categoriesLoading,
+    getCategory
+  } = useCategoriesStore();
   
   const [isOpen, setIsOpen] = useState(false);
-  const activeCategory = getActiveCategory();
+  const activeCategory = selectedCategory ? getCategory(selectedCategory) : null;
 
   const handleCategorySelect = (category: Category) => {
-    setActiveCategory(category.id);
+    selectCategory(category.id);
     setIsOpen(false);
   };
 
   const handleClearSelection = () => {
-    setActiveCategory(null);
+    selectCategory(null);
     setIsOpen(false);
   };
 
@@ -117,7 +117,7 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
             variant="outline"
             className={cn(
               "justify-between min-w-[140px]",
-              variant === 'header' && "bg-white/90 backdrop-blur-sm"
+              variant === 'header' && "bg-white border-gray-200"
             )}
             disabled={categoriesLoading}
           >
@@ -155,7 +155,7 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
             onClick={handleClearSelection}
             className={cn(
               "flex items-center justify-between cursor-pointer py-2",
-              !activeCategoryId && "bg-primary/10 text-primary"
+              !selectedCategory && "bg-primary/10 text-primary"
             )}
           >
             <div className="flex items-center gap-2">
@@ -164,7 +164,7 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
             </div>
             {showVideoCount && (
               <Badge 
-                variant={!activeCategoryId ? "default" : "secondary"}
+                variant={!selectedCategory ? "default" : "secondary"}
                 className="text-xs"
               >
                 {categories.reduce((sum, cat) => sum + (cat.videoCount || 0), 0)}
@@ -199,7 +199,7 @@ const CategorySelector: React.FC<CategorySelectorProps> = ({
                 <CategoryItem
                   key={category.id}
                   category={category}
-                  isActive={activeCategoryId === category.id}
+                  isActive={selectedCategory === category.id}
                   onClick={handleCategorySelect}
                   showVideoCount={showVideoCount}
                 />

@@ -1,15 +1,26 @@
 import React from 'react';
-import { ExternalLink, Clock, Award } from 'lucide-react';
+import { ExternalLink, Clock, Award, Brain, TrendingUp, CheckCircle } from 'lucide-react';
 import { VideoUI } from '../types/video-ui';
+import { VideoAnalysis } from '../types';
 import { cn } from '../utils/cn';
 import { motion } from 'framer-motion';
+import { formatDistanceToNow } from 'date-fns';
 
 interface VideoCardProps {
   video: VideoUI;
   index: number;
+  showAnalysis?: boolean;
+  analysis?: VideoAnalysis;
+  isLoadingAnalysis?: boolean;
 }
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, index }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ 
+  video, 
+  index, 
+  showAnalysis = true,
+  analysis,
+  isLoadingAnalysis = false
+}) => {
   const { 
     id, 
     title, 
@@ -42,6 +53,10 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, index }) => {
     if (score >= 50) return 'bg-warning-400';
     return 'bg-error-500';
   };
+
+  // Check if we have valid analysis data
+  const hasAnalysis = analysis && analysis.confidence > 0.5;
+  const shouldShowAnalysis = showAnalysis && (hasAnalysis || isLoadingAnalysis);
 
   return (
     <motion.div 
@@ -91,6 +106,96 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, index }) => {
               ))}
             </ul>
           </div>
+
+          {/* AI Analysis Section */}
+          {shouldShowAnalysis && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                  <Brain className="h-4 w-4 text-blue-600" />
+                  AI Analysis
+                </h4>
+                {hasAnalysis && (
+                  <div className="flex items-center space-x-2">
+                    <ScoreIndicator 
+                      label="Quality" 
+                      score={Math.round(analysis.overallQualityScore * 100)} 
+                      color="green" 
+                    />
+                    {analysis.engagementScore && (
+                      <ScoreIndicator 
+                        label="Engagement" 
+                        score={Math.round(analysis.engagementScore * 100)} 
+                        color="blue" 
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {isLoadingAnalysis && (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-sm text-gray-500">Analyzing content...</span>
+                </div>
+              )}
+              
+              {hasAnalysis && (
+                <>
+                  {analysis.summary && (
+                    <p className="text-sm text-gray-600 mb-3">{analysis.summary}</p>
+                  )}
+                  
+                  {analysis.keyTopics.length > 0 && (
+                    <div className="mb-3">
+                      <h5 className="text-xs font-medium text-gray-700 mb-2 flex items-center gap-1">
+                        <TrendingUp className="h-3 w-3" />
+                        Key Topics
+                      </h5>
+                      <div className="flex flex-wrap gap-1">
+                        {analysis.keyTopics.slice(0, 4).map((topic, idx) => (
+                          <span 
+                            key={idx} 
+                            className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-200"
+                          >
+                            {topic}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {analysis.pros.length > 0 && (
+                    <div className="mb-3">
+                      <h5 className="text-xs font-medium text-gray-700 mb-2 flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3 text-green-600" />
+                        Strengths
+                      </h5>
+                      <ul className="space-y-1">
+                        {analysis.pros.slice(0, 2).map((pro, idx) => (
+                          <li key={idx} className="text-xs text-gray-600 flex items-start">
+                            <span className="w-1 h-1 bg-green-400 rounded-full mt-1.5 mr-2 flex-shrink-0" />
+                            {pro}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <div className="flex items-center gap-2">
+                      <span>Confidence: {Math.round(analysis.confidence * 100)}%</span>
+                      <span className="text-gray-300">•</span>
+                      <span className="capitalize">{analysis.difficultyLevel}</span>
+                    </div>
+                    <span>
+                      {formatDistanceToNow(analysis.analysisDate, { addSuffix: true })}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           
           <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
             <div className="flex items-center text-sm text-gray-500">
@@ -110,6 +215,33 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, index }) => {
         </div>
       </div>
     </motion.div>
+  );
+};
+
+// Score Indicator Component
+const ScoreIndicator: React.FC<{
+  label: string;
+  score: number;
+  color: 'blue' | 'green' | 'yellow' | 'red';
+}> = ({ label, score, color }) => {
+  const getColorClasses = (color: 'blue' | 'green' | 'yellow' | 'red', score: number) => {
+    const intensity = score >= 80 ? '600' : score >= 60 ? '500' : '400';
+    const colorMap: Record<'blue' | 'green' | 'yellow' | 'red', string> = {
+      blue: `bg-blue-${intensity} text-blue-50`,
+      green: `bg-green-${intensity} text-green-50`, 
+      yellow: `bg-yellow-${intensity} text-yellow-50`,
+      red: `bg-red-${intensity} text-red-50`,
+    };
+    return colorMap[color] || colorMap.blue;
+  };
+
+  return (
+    <div className={cn(
+      "px-2 py-1 rounded-full text-xs font-medium",
+      getColorClasses(color, score)
+    )}>
+      {label}: {score}
+    </div>
   );
 };
 

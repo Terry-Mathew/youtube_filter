@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/store";
+import { useCategoriesStore } from "@/store/categories";
 import { CategoryForm } from "@/components/ui/CategoryForm";
 import { CategoryListItem } from "@/components/ui/CategoryListItem";
 import { Category, CategoryId } from "@/types";
@@ -105,34 +106,41 @@ function DeleteConfirmationDialog({
 export function CategoryManager({ className }: CategoryManagerProps) {
   const { 
     categories, 
-    deleteCategory, 
-    searchCategories,
+    isLoading: categoriesLoading,
+    error,
+    selectedCategory,
+    searchQuery,
+    fetchCategories,
+    deleteCategory: deleteCategoryFromDb,
+    setSearchQuery,
     getFilteredCategories,
-    updateCategoryFilters,
-    categoryFilters,
-    categoriesLoading
-  } = useAppStore();
+    clearError
+  } = useCategoriesStore();
 
   const { toast } = useToast();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | undefined>(undefined);
-  const [localSearchQuery, setLocalSearchQuery] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     category: Category | undefined;
     isOpen: boolean;
   }>({ category: undefined, isOpen: false });
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Filter categories based on search query
+  // Initialize categories on component mount
+  React.useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  // Clear errors when component unmounts
+  React.useEffect(() => {
+    return () => clearError();
+  }, [clearError]);
+
+  // Get filtered categories from store
   const filteredCategories = useMemo(() => {
-    if (!localSearchQuery.trim()) {
-      return getFilteredCategories();
-    }
-    
-    const searchResults = searchCategories(localSearchQuery);
-    return categories.filter(cat => searchResults.includes(cat.id));
-  }, [categories, localSearchQuery, searchCategories, getFilteredCategories]);
+    return getFilteredCategories();
+  }, [getFilteredCategories]);
 
   const handleCreateCategory = () => {
     setEditingCategory(undefined);
@@ -159,16 +167,20 @@ export function CategoryManager({ className }: CategoryManagerProps) {
 
     setIsDeleting(true);
     try {
-      await deleteCategory(deleteConfirmation.category.id);
+      const success = await deleteCategoryFromDb(deleteConfirmation.category.id);
       
-      // Success toast
-      toast({
-        title: "Category deleted",
-        description: `"${deleteConfirmation.category.name}" has been successfully deleted.`,
-      });
+      if (success) {
+        // Success toast
+        toast({
+          title: "Category deleted",
+          description: `"${deleteConfirmation.category.name}" has been successfully deleted.`,
+        });
 
-      // Close dialog
-      setDeleteConfirmation({ category: undefined, isOpen: false });
+        // Close dialog
+        setDeleteConfirmation({ category: undefined, isOpen: false });
+      } else {
+        throw new Error("Failed to delete category");
+      }
     } catch (error) {
       console.error("Failed to delete category:", error);
       
@@ -208,12 +220,11 @@ export function CategoryManager({ className }: CategoryManagerProps) {
   };
 
   const handleSearchChange = (value: string) => {
-    setLocalSearchQuery(value);
-    updateCategoryFilters({ searchQuery: value });
+    setSearchQuery(value);
   };
 
   const isEmptyState = categories.length === 0;
-  const hasNoResults = filteredCategories.length === 0 && localSearchQuery.trim();
+  const hasNoResults = filteredCategories.length === 0 && searchQuery.trim();
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -260,7 +271,7 @@ export function CategoryManager({ className }: CategoryManagerProps) {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Search categories by name, description, or tags..."
-                  value={localSearchQuery}
+                  value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-10"
                 />
@@ -272,14 +283,40 @@ export function CategoryManager({ className }: CategoryManagerProps) {
             </div>
             
             {/* Search Results Summary */}
-            {localSearchQuery.trim() && (
+            {searchQuery.trim() && (
               <div className="mt-4 text-sm text-gray-600">
                 {hasNoResults 
-                  ? `No categories found for "${localSearchQuery}"`
-                  : `${filteredCategories.length} category${filteredCategories.length !== 1 ? 'ies' : ''} found for "${localSearchQuery}"`
+                  ? `No categories found for "${searchQuery}"`
+                  : `${filteredCategories.length} category${filteredCategories.length !== 1 ? 'ies' : ''} found for "${searchQuery}"`
                 }
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center space-x-3">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              <div>
+                <p className="text-red-800 font-medium">Failed to load categories</p>
+                <p className="text-red-600 text-sm mt-1">{error}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  clearError();
+                  fetchCategories();
+                }}
+                className="ml-auto"
+              >
+                Try Again
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -366,7 +403,7 @@ export function CategoryManager({ className }: CategoryManagerProps) {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900">
-                  {categories.filter(cat => cat.isAiSuggested).length}
+                  {categories.filter(cat => 'isAiSuggested' in cat ? cat.isAiSuggested : false).length}
                 </div>
                 <div className="text-sm text-gray-600">AI Suggested</div>
               </div>

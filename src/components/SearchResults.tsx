@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, RefreshCw, AlertCircle, Filter, SortDesc, Loader2 } from 'lucide-react';
+import { Search, RefreshCw, AlertCircle, Filter, SortDesc, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import VideoCard from './VideoCard';
 import FilterPanel from './FilterPanel';
 import { useAppStore } from '../store';
+import { useVideoSearch } from '../hooks/useVideoSearch';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
@@ -33,6 +34,21 @@ const SearchResults: React.FC = () => {
     categories,
     userPreferences 
   } = useAppStore();
+  
+  // YouTube API integration
+  const {
+    videos: youtubeVideos,
+    isLoading: isYouTubeSearching,
+    error: youtubeError,
+    hasNextPage,
+    hasPrevPage,
+    currentPage,
+    totalResults,
+    searchVideos: searchYouTubeVideos,
+    loadNextPage,
+    loadPrevPage,
+    clearResults: clearYouTubeResults,
+  } = useVideoSearch();
   
   // Filter and sort state
   const [filters, setFilters] = useState<VideoFilters>({});

@@ -1736,33 +1736,7 @@ export class YouTubeApiClient {
     }
   }
 
-  /**
-   * Enhanced quota management with intelligent tracking
-   */
-  async checkQuotaAvailability(operationCost: QuotaUnits): Promise<boolean> {
-    // Update quota tracking
-    this.updateQuotaTracker();
 
-    // Check daily quota
-    if (this.quotaTracker.daily.used + operationCost > this.quotaTracker.daily.limit) {
-      await this.handleQuotaExceeded('daily', operationCost);
-      return false;
-    }
-
-    // Check hourly quota
-    if (this.quotaTracker.hourly.used + operationCost > this.quotaTracker.hourly.limit) {
-      await this.handleQuotaExceeded('hourly', operationCost);
-      return false;
-    }
-
-    // Check rate limiting
-    if (!this.checkRateLimit()) {
-      await this.handleRateLimitExceeded();
-      return false;
-    }
-
-    return true;
-  }
 
   /**
    * Update quota tracking with time-based resets
@@ -1938,7 +1912,9 @@ export class YouTubeApiClient {
       const queueItem = this.requestQueue[0];
       
       // Check if we can process this request
-      if (!(await this.checkQuotaAvailability(queueItem.quotaCost))) {
+      try {
+        this.checkQuotaAvailability(queueItem.quotaCost);
+      } catch (error) {
         // If quota not available, wait and try again
         await this.delay(5000); // Wait 5 seconds
         continue;
@@ -1963,58 +1939,10 @@ export class YouTubeApiClient {
   }
 
   /**
-   * Update quota usage tracking
+   * Simple delay utility for rate limiting
    */
-  private updateQuotaUsage(cost: QuotaUnits): void {
-    const now = Date.now();
-    
-    this.quotaTracker.daily.used += cost;
-    this.quotaTracker.hourly.used += cost;
-    this.quotaTracker.requests.timestamps.push(now);
-    this.quotaTracker.requests.count = this.quotaTracker.requests.timestamps.length;
-
-    // Log usage warnings
-    const dailyUsagePercent = (this.quotaTracker.daily.used / this.quotaTracker.daily.limit) * 100;
-    const hourlyUsagePercent = (this.quotaTracker.hourly.used / this.quotaTracker.hourly.limit) * 100;
-
-    if (dailyUsagePercent >= 80) {
-      this.log(`Daily quota usage at ${dailyUsagePercent.toFixed(1)}%`, { level: 'warn' });
-    }
-
-    if (hourlyUsagePercent >= 80) {
-      this.log(`Hourly quota usage at ${hourlyUsagePercent.toFixed(1)}%`, { level: 'warn' });
-    }
-  }
-
-  /**
-   * Get current quota status for user display
-   */
-  getQuotaStatus(): {
-    daily: { used: number; limit: number; percentageUsed: number; resetTime: number };
-    hourly: { used: number; limit: number; percentageUsed: number; resetTime: number };
-    requests: { count: number; limit: number; windowSize: number };
-  } {
-    this.updateQuotaTracker();
-    
-    return {
-      daily: {
-        used: this.quotaTracker.daily.used,
-        limit: this.quotaTracker.daily.limit,
-        percentageUsed: (this.quotaTracker.daily.used / this.quotaTracker.daily.limit) * 100,
-        resetTime: this.quotaTracker.daily.resetTime,
-      },
-      hourly: {
-        used: this.quotaTracker.hourly.used,
-        limit: this.quotaTracker.hourly.limit,
-        percentageUsed: (this.quotaTracker.hourly.used / this.quotaTracker.hourly.limit) * 100,
-        resetTime: this.quotaTracker.hourly.resetTime,
-      },
-      requests: {
-        count: this.quotaTracker.requests.count,
-        limit: this.quotaTracker.requests.limit,
-        windowSize: this.quotaTracker.requests.window / 1000,
-      },
-    };
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**

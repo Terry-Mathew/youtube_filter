@@ -1,14 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '../types/supabase'; // Will be generated in TASK_012
+import type { Database } from '../types/supabase';
 
 // Environment variables for Supabase configuration
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Validate environment variables with helpful error messages
 if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('❌ SETUP ERROR: Missing Supabase Environment Variables!');
+  console.error('');
+  console.error('🔧 Required Setup:');
+  console.error('1. Create .env.local file in your project root');
+  console.error('2. Add the following variables:');
+  console.error('   VITE_SUPABASE_URL=https://your-project.supabase.co');
+  console.error('   VITE_SUPABASE_ANON_KEY=your-anon-key');
+  console.error('3. Get these values from: Supabase Dashboard → Settings → API');
+  console.error('4. Restart your development server');
+  console.error('');
+  console.error('Current values:');
+  console.error('- VITE_SUPABASE_URL:', supabaseUrl || 'undefined');
+  console.error('- VITE_SUPABASE_ANON_KEY:', supabaseAnonKey || 'undefined');
+  
   throw new Error(
-    'Missing Supabase environment variables. Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set.'
+    '🚨 Supabase not configured! Check console for setup instructions.'
   );
+}
+
+// Success - log environment info (only in development)
+if (import.meta.env.DEV) {
+  console.log('✅ Supabase Environment Variables Loaded:', {
+    url: supabaseUrl.substring(0, 30) + '...',
+    keyPrefix: supabaseAnonKey.substring(0, 20) + '...',
+    environment: import.meta.env.MODE
+  });
 }
 
 /**

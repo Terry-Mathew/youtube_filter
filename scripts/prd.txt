@@ -1,0 +1,582 @@
+# YouTube Filter (Learning Tube Evolution) - Product Requirements Document
+
+## Overview
+
+**Product Name:** YouTube Filter (Evolution of Learning Tube)
+
+**Problem Statement:** 
+Indie hackers, tech founders, and learners spend excessive time sifting through low-quality YouTube content to find relevant, high-value educational videos. YouTube's generic recommendations don't cater to specific learning goals or professional development needs.
+
+**Solution:** 
+Transform the existing Learning Tube platform into an AI-powered content curation tool that allows users to create custom categories, bring their own YouTube API keys, and receive personally curated video recommendations filtered by AI analysis of video transcripts.
+
+**Target Users:**
+- Indie hackers learning new skills (AI, coding, business)
+- Tech founders exploring industry trends
+- Hobbyists pursuing personal interests (biking, cooking, photography)
+- Professional learners frustrated with generic YouTube recommendations
+
+**Value Proposition:** 
+"Your personal AI curator that organizes YouTube videos by your custom topics, saving hours by filtering out irrelevant content while surfacing the highest-quality educational material."
+
+**Existing Foundation:**
+- Established React/TypeScript application with modern UI
+- Video card system with relevance scoring (0-100)
+- Search functionality with history tracking
+- Settings management with user preferences
+- Responsive design with Tailwind CSS and Framer Motion
+- Zustand state management
+
+## Core Features
+
+### 1. **User-Provided YouTube API Key Management**
+**What it does:** Allows users to input and securely store their own YouTube Data API v3 keys
+**Why it's important:** Eliminates quota limitations, ensures scalability, and reduces operational costs
+**How it works:**
+- Secure input form in Settings page
+- API key validation and testing
+- Encrypted storage in browser (localStorage initially, Supabase later)
+- Clear guidance for creating restricted keys in Google Cloud Console
+- Usage monitoring and quota warnings
+
+**Current Foundation:** Settings page already exists with user preferences management
+
+### 2. **Custom Category System**
+**What it does:** Users create, manage, and organize custom learning categories
+**Why it's important:** Enables personalized content organization across diverse topics and interests
+**How it works:**
+- Category creation modal with name and keyword inputs
+- Multiple keyword support per category (e.g., "AI tutorials", "machine learning basics")
+- Category editing and deletion capabilities
+- Category switching interface in main dashboard
+- Persistent storage per user
+
+**Current Foundation:** Search functionality exists; extending to persistent categories
+
+### 3. **Enhanced YouTube Content Discovery**
+**What it does:** Automatically fetches relevant YouTube videos for each user category
+**Why it's important:** Provides fresh, relevant content without manual searching
+**How it works:**
+- Integration with YouTube Data API v3 using user-provided keys
+- Keyword-based search per category with advanced filtering
+- Scheduled fetching (manual trigger initially, automatic later)
+- Duplicate detection and content freshness management
+- Video metadata extraction and storage
+
+**Current Foundation:** Video display system and search results already implemented
+
+### 4. **Automatic Transcript Extraction**
+**What it does:** Extracts and processes video transcripts for AI analysis
+**Why it's important:** Enables content quality assessment and relevance scoring
+**How it works:**
+- Integration with youtube-transcript-api (no additional API key required)
+- Support for auto-generated and manual captions
+- Multiple language support
+- Transcript cleaning and preprocessing
+- Fallback handling for videos without transcripts
+
+**Current Foundation:** Video processing pipeline foundation exists
+
+### 5. **AI-Powered Content Analysis & Filtering**
+**What it does:** Uses AI to analyze video content and assign relevance scores
+**Why it's important:** Automatically filters out low-quality or irrelevant content
+**How it works:**
+- OpenAI API integration for transcript analysis
+- Custom prompts for category-specific relevance scoring
+- Quality assessment based on content depth and educational value
+- Key insights extraction for video summaries
+- Confidence scoring for AI recommendations
+
+**Current Foundation:** Relevance scoring system and key insights display already implemented
+
+### 6. **Enhanced Video Ranking & Display**
+**What it does:** Displays curated videos ranked by AI-determined relevance and quality
+**Why it's important:** Surfaces the most valuable content first, maximizing learning efficiency
+**How it works:**
+- Multi-factor ranking algorithm (relevance, quality, recency, engagement)
+- Category-filtered video display
+- Enhanced video cards with AI insights
+- Quick category switching
+- Saved/bookmarked video functionality
+
+**Current Foundation:** Video card system with relevance scores already implemented
+
+### 7. **Category Management Interface**
+**What it does:** Provides intuitive UI for managing learning categories
+**Why it's important:** Enables users to organize and refine their learning focus areas
+**How it works:**
+- Category dashboard with usage statistics
+- Drag-and-drop category reordering
+- Keyword management per category
+- Category-specific settings (update frequency, minimum relevance threshold)
+- Import/export category configurations
+
+**Current Foundation:** Settings page structure can be extended for category management
+
+## User Experience
+
+### User Personas
+
+**The Indie Learner (Primary)**
+- **Demographics:** 25-35, solo entrepreneurs, self-taught developers
+- **Needs:** Targeted tutorials for specific technologies (React, AI, blockchain)
+- **Pain Points:** Overwhelmed by tutorial quantity, inconsistent quality
+- **Goals:** Master new skills efficiently, stay updated with latest trends
+- **Usage Pattern:** Daily 30-60 minute learning sessions
+
+**The Tech Founder (Secondary)**
+- **Demographics:** 30-45, startup founders, tech executives
+- **Needs:** Industry insights, business strategy, leadership content
+- **Pain Points:** Limited time, need high-value content only
+- **Goals:** Strategic learning, competitive intelligence, team development
+- **Usage Pattern:** Weekly strategic learning sessions
+
+**The Hobbyist Explorer (Secondary)**
+- **Demographics:** 20-65, diverse backgrounds, personal interest learners
+- **Needs:** Content for hobbies (cooking, photography, fitness, crafts)
+- **Pain Points:** Generic recommendations, too much beginner content
+- **Goals:** Deepen expertise in chosen hobbies, discover new techniques
+- **Usage Pattern:** Weekend learning, project-based consumption
+
+### Key User Flows
+
+**Onboarding Flow:**
+1. User signs up (existing auth system or simple localStorage initially)
+2. Welcome screen explains YouTube API key requirement
+3. User inputs YouTube API key with validation
+4. Guided category creation (start with 2-3 categories)
+5. System fetches initial videos for categories
+6. User views first curated results
+
+**Daily Usage Flow:**
+1. User opens app and sees category tabs/selector
+2. Selects desired category (e.g., "AI Development")
+3. Views AI-curated video list ranked by relevance
+4. Clicks video to open in new tab
+5. Returns to explore other categories or refine selections
+
+**Category Management Flow:**
+1. User accesses category management from settings/dashboard
+2. Creates new category with descriptive name
+3. Adds relevant keywords and phrases
+4. Sets category preferences (minimum quality threshold)
+5. System automatically fetches and analyzes content
+6. User reviews and refines category based on initial results
+
+**API Key Setup Flow:**
+1. User accesses Settings → API Configuration
+2. Clicks guided setup for YouTube API key
+3. Follows step-by-step Google Cloud Console instructions
+4. Inputs and validates API key
+5. System performs test queries to verify functionality
+6. User sees confirmation and usage statistics
+
+### UI/UX Considerations
+
+**Visual Design:**
+- Maintain existing modern, clean aesthetic
+- Extend current card-based video layout
+- Add category navigation (tabs or sidebar)
+- Preserve existing color scheme and animations
+
+**Navigation Improvements:**
+- Add category selector to main header
+- Quick category switching without page reload
+- Breadcrumb navigation for multi-level organization
+
+**Mobile Responsiveness:**
+- Maintain existing responsive design
+- Optimize category switching for mobile
+- Touch-friendly category management interface
+
+**Performance Optimization:**
+- Lazy loading for video thumbnails
+- Efficient category switching with caching
+- Progressive loading for large video lists
+
+## Technical Architecture
+
+### System Components
+
+**Frontend (React 18 + TypeScript)**
+- **Existing:** Video display, search, settings, routing, animations
+- **Extensions:** Category management components, API key configuration, enhanced video filtering
+- **New Components:**
+  - `CategoryManager.tsx` - Category CRUD operations
+  - `ApiKeySetup.tsx` - YouTube API key configuration
+  - `CategorySelector.tsx` - Category navigation
+  - `VideoQueue.tsx` - Category-specific video lists
+
+**Backend API (Node.js/Express - New)**
+- RESTful API endpoints for video processing and AI analysis
+- YouTube Data API integration
+- Transcript extraction service
+- OpenAI API integration
+- Rate limiting and quota management
+
+**Database (Supabase - New)**
+- User authentication and profiles
+- Category storage and management
+- Video metadata and analysis results
+- API key storage (encrypted)
+- Usage analytics and preferences
+
+**External Services Integration:**
+- YouTube Data API v3 (user-provided keys)
+- youtube-transcript-api (Python service or Node.js equivalent)
+- OpenAI API (GPT-4 for content analysis)
+- Supabase (authentication, database, real-time updates)
+
+### Data Models
+
+```typescript
+// Extend existing types
+interface User {
+  id: string;
+  email: string;
+  youtube_api_key: string; // encrypted
+  preferences: UserPreferences;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Category {
+  id: string;
+  user_id: string;
+  name: string;
+  keywords: string[];
+  settings: CategorySettings;
+  video_count: number;
+  last_updated: string;
+  created_at: string;
+}
+
+interface CategorySettings {
+  min_relevance_score: number;
+  max_videos: number;
+  update_frequency: 'manual' | 'daily' | 'weekly';
+  content_types: string[];
+}
+
+// Extend existing Video interface
+interface Video {
+  id: string;
+  youtube_id: string;
+  title: string;
+  channel_title: string;
+  channel_id: string;
+  thumbnail_url: string;
+  published_at: string;
+  duration: string;
+  view_count: number;
+  description: string;
+  transcript?: string;
+  language: string;
+}
+
+interface VideoAnalysis {
+  id: string;
+  video_id: string;
+  category_id: string;
+  relevance_score: number;
+  quality_score: number;
+  key_insights: string[];
+  summary: string;
+  confidence_level: number;
+  analyzed_at: string;
+}
+
+interface ApiUsage {
+  user_id: string;
+  date: string;
+  youtube_quota_used: number;
+  openai_tokens_used: number;
+  videos_processed: number;
+}
+```
+
+### APIs and Integrations
+
+**Internal API Endpoints:**
+POST /api/categories - Create new category
+GET /api/categories - List user categories
+PUT /api/categories/:id - Update category
+DELETE /api/categories/:id - Delete category
+POST /api/videos/fetch - Trigger video fetching for category
+GET /api/videos/:categoryId - Get videos for category
+POST /api/videos/analyze - Trigger AI analysis
+POST /api/auth/youtube-key - Store/update YouTube API key
+GET /api/auth/youtube-key/validate - Validate API key
+GET /api/usage/stats - Get API usage statistics
+
+
+**External API Integration:**
+- **YouTube Data API v3:** Video search, metadata retrieval
+- **YouTube Transcript API:** Transcript extraction
+- **OpenAI API:** Content analysis and scoring
+- **Supabase API:** Database operations and authentication
+
+### Infrastructure Requirements
+
+**Development Environment:**
+- Frontend: Vite dev server (existing)
+- Backend: Local Node.js/Express server
+- Database: Supabase cloud instance
+- External APIs: Development quotas and API keys
+
+**Production Environment:**
+- Frontend: Netlify/Vercel hosting (existing setup compatible)
+- Backend: Railway/Render/Heroku for Node.js API
+- Database: Supabase production tier
+- CDN: Cloudflare for static assets
+- Monitoring: Basic error tracking and usage analytics
+
+## Development Roadmap
+
+### Phase 1: Foundation & Category System (MVP Core)
+**Scope:** Essential category management and data architecture
+**Deliverables:**
+- Extend Zustand store with category management
+- Create category CRUD interface
+- Add category selector to main UI
+- Implement local storage for categories (temporary)
+- Basic category-based video filtering of existing search results
+
+**Technical Tasks:**
+- Update type definitions for categories
+- Create `CategoryManager` component
+- Add category state management to store
+- Implement category switching in main interface
+- Create category creation/editing modals
+
+### Phase 2: YouTube API Integration
+**Scope:** Connect to YouTube Data API using user-provided keys
+**Deliverables:**
+- YouTube API key management in settings
+- Video fetching based on category keywords
+- Basic video metadata storage
+- Integration with existing video display system
+
+**Technical Tasks:**
+- Create API key input and validation UI
+- Set up backend API server
+- Implement YouTube Data API integration
+- Create video fetching endpoints
+- Connect frontend to new API endpoints
+
+### Phase 3: Transcript & AI Analysis
+**Scope:** Add AI-powered content analysis and relevance scoring
+**Deliverables:**
+- Automatic transcript extraction
+- AI analysis of video content
+- Enhanced relevance scoring
+- AI-generated key insights
+
+**Technical Tasks:**
+- Integrate transcript extraction service
+- Set up OpenAI API integration
+- Create content analysis pipeline
+- Enhance video cards with AI insights
+- Implement relevance-based sorting
+
+### Phase 4: Data Persistence & User Management
+**Scope:** Move from localStorage to proper database with user accounts
+**Deliverables:**
+- Supabase integration for data persistence
+- User authentication system
+- Secure API key storage
+- Cross-device synchronization
+
+**Technical Tasks:**
+- Set up Supabase project and database schema
+- Implement authentication flow
+- Migrate category management to database
+- Add API key encryption
+- Update all components to use database
+
+### Phase 5: Advanced Features & Optimization
+**Scope:** Enhanced user experience and performance improvements
+**Deliverables:**
+- Advanced category management (import/export, templates)
+- Usage analytics and quota monitoring
+- Performance optimizations
+- Advanced filtering and sorting options
+
+**Technical Tasks:**
+- Implement usage tracking and analytics
+- Add advanced category features
+- Optimize video loading and caching
+- Create admin dashboard for monitoring
+- Add batch processing for large category updates
+
+### Phase 6: Polish & Production Ready
+**Scope:** Production deployment and user experience refinement
+**Deliverables:**
+- Production deployment pipeline
+- Error handling and user feedback
+- Documentation and onboarding improvements
+- Performance monitoring and optimization
+
+**Technical Tasks:**
+- Set up production infrastructure
+- Implement comprehensive error handling
+- Add user feedback and support systems
+- Create user documentation and guides
+- Set up monitoring and alerting
+
+## Logical Dependency Chain
+
+### Foundation Layer (Must Build First)
+1. **Category Data Models** - Define TypeScript interfaces and data structures
+2. **Extended State Management** - Add category management to Zustand store
+3. **Basic Category UI** - Create category creation and selection components
+
+### API Integration Layer (Build After Foundation)
+4. **Backend API Setup** - Create Express server with basic routing
+5. **YouTube API Integration** - Connect to YouTube Data API
+6. **API Key Management** - Secure storage and validation of user API keys
+
+### Intelligence Layer (Build After API Integration)
+7. **Transcript Extraction** - Integrate youtube-transcript-api
+8. **AI Analysis Pipeline** - OpenAI integration for content analysis
+9. **Enhanced Scoring** - Improve existing relevance scoring with AI insights
+
+### Persistence Layer (Can Be Built in Parallel with Intelligence)
+10. **Database Schema** - Set up Supabase database structure
+11. **User Authentication** - Implement user accounts and sessions
+12. **Data Migration** - Move from localStorage to database
+
+### Optimization Layer (Build Last)
+13. **Performance Optimization** - Caching, lazy loading, batch processing
+14. **Advanced Features** - Analytics, advanced filtering, export capabilities
+15. **Production Polish** - Error handling, monitoring, documentation
+
+### Critical Path for Usable Frontend
+**Week 1:** Category management UI (extends existing interface)
+**Week 2:** YouTube API integration (populates existing video cards)
+**Week 3:** AI analysis integration (enhances existing relevance scores)
+**Week 4:** Polish and optimization (improves existing user experience)
+
+This approach ensures users see immediate value while building toward the full vision.
+
+## Risks and Mitigations
+
+### Technical Risks
+
+**Risk: YouTube API Quota Limitations**
+- **Impact:** Users may hit daily quotas with extensive searching
+- **Mitigation:** 
+  - Implement intelligent caching and deduplication
+  - Add quota monitoring and warnings
+  - Provide guidance on API key restrictions
+  - Implement batch processing for efficiency
+
+**Risk: AI Analysis Costs**
+- **Impact:** OpenAI API costs could scale unexpectedly
+- **Mitigation:**
+  - Implement transcript length limits
+  - Use cost-effective models (GPT-3.5 initially)
+  - Add usage tracking and limits
+  - Optimize prompts for efficiency
+
+**Risk: Transcript Availability**
+- **Impact:** Not all videos have usable transcripts
+- **Mitigation:**
+  - Graceful fallback to metadata-only analysis
+  - Clear indicators for transcript availability
+  - Alternative analysis methods for non-transcript videos
+
+### Product Risks
+
+**Risk: User Onboarding Complexity**
+- **Impact:** YouTube API key setup may deter users
+- **Mitigation:**
+  - Create detailed, visual setup guides
+  - Provide test API keys for initial trials
+  - Streamline onboarding flow with clear value demonstration
+
+**Risk: Category Management Overwhelming Users**
+- **Impact:** Too many options may reduce usage
+- **Mitigation:**
+  - Start with simple category creation
+  - Provide category templates and suggestions
+  - Progressive disclosure of advanced features
+
+**Risk: AI Analysis Accuracy**
+- **Impact:** Poor relevance scoring reduces user trust
+- **Mitigation:**
+  - Implement user feedback loops for scoring
+  - A/B test different analysis approaches
+  - Provide transparency in scoring methodology
+
+### Business Risks
+
+**Risk: External API Dependencies**
+- **Impact:** Changes to YouTube or OpenAI APIs could break functionality
+- **Mitigation:**
+  - Build abstraction layers for API integrations
+  - Monitor API changes and deprecation notices
+  - Have fallback strategies for critical functionality
+
+**Risk: Competitive Landscape**
+- **Impact:** Similar tools may emerge with better features
+- **Mitigation:**
+  - Focus on unique value proposition (user-owned API keys)
+  - Rapid iteration and feature development
+  - Strong user experience and community building
+
+## Appendix
+
+### Research Findings
+
+**User Pain Points Identified:**
+- YouTube's recommendation algorithm favors engagement over educational value
+- Difficulty discovering high-quality content in specific niches
+- Time wasted on clickbait and low-value content
+- Lack of organization for learning-focused video consumption
+
+**Competitive Analysis:**
+- No direct competitors offering user-owned API key model
+- Most alternatives are either too generic or too specialized
+- Opportunity for middle ground: personalized but user-controlled
+
+### Technical Specifications
+
+**Minimum System Requirements:**
+- Modern web browser with JavaScript enabled
+- Stable internet connection for API calls
+- YouTube API key with appropriate quotas
+
+**Performance Targets:**
+- Category switching: < 500ms
+- Video loading: < 2 seconds for initial batch
+- AI analysis: < 30 seconds per video
+- Search results: < 5 seconds for cached categories
+
+**Security Considerations:**
+- API key encryption at rest
+- HTTPS for all API communications
+- Input validation and sanitization
+- Rate limiting to prevent abuse
+
+### Development Resources
+
+**Required Skills:**
+- Frontend: React, TypeScript, Tailwind CSS (existing team capabilities)
+- Backend: Node.js, Express, API integrations
+- Database: SQL, Supabase administration
+- AI: OpenAI API integration, prompt engineering
+
+**External Dependencies:**
+- YouTube Data API v3 documentation
+- OpenAI API documentation
+- Supabase documentation and SDKs
+- youtube-transcript-api or equivalent Node.js library
+
+**Estimated Development Timeline:**
+- **Phase 1-2 (MVP):** 3-4 weeks
+- **Phase 3-4 (Full Features):** 4-5 weeks
+- **Phase 5-6 (Production Ready):** 2-3 weeks
+- **Total:** 9-12 weeks for complete implementation
+
+This roadmap builds incrementally on your existing foundation while delivering user value at each phase.

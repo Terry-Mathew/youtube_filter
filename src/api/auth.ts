@@ -887,4 +887,105 @@ export function getValidationStatusMessage(result: YouTubeValidationResult): {
     title: isTemporary ? 'Temporary Issue' : 'Validation Failed',
     message: result.errorMessage || 'Unknown validation error occurred.',
   };
+}
+
+// =============================================================================
+// Auth Configuration and Setup
+// =============================================================================
+
+/**
+ * Verify Supabase Auth configuration
+ */
+export function verifyAuthConfiguration(): {
+  isValid: boolean;
+  missingVars: string[];
+  config: {
+    url: string | undefined;
+    anonKey: string | undefined;
+    isLocalDevelopment: boolean;
+  };
+} {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const isLocalDevelopment = url?.includes('localhost') || url?.includes('127.0.0.1');
+  
+  const missingVars: string[] = [];
+  if (!url) missingVars.push('VITE_SUPABASE_URL');
+  if (!anonKey) missingVars.push('VITE_SUPABASE_ANON_KEY');
+  
+  return {
+    isValid: missingVars.length === 0,
+    missingVars,
+    config: {
+      url,
+      anonKey,
+      isLocalDevelopment,
+    },
+  };
+}
+
+/**
+ * Get auth redirect URLs based on environment
+ */
+export function getAuthRedirectUrls(): {
+  signIn: string;
+  signUp: string;
+  callback: string;
+  passwordReset: string;
+} {
+  const baseUrl = window.location.origin;
+  
+  return {
+    signIn: `${baseUrl}/auth/signin`,
+    signUp: `${baseUrl}/auth/signup`,
+    callback: `${baseUrl}/auth/callback`,
+    passwordReset: `${baseUrl}/auth/reset-password`,
+  };
+}
+
+/**
+ * Enhanced OAuth sign-in with proper error handling
+ */
+export async function signInWithProvider(
+  provider: 'google' | 'github' | 'discord' | 'twitter',
+  options: {
+    redirectTo?: string;
+    scopes?: string;
+    queryParams?: Record<string, string>;
+  } = {}
+): Promise<ApiResponse<{ url: string }>> {
+  try {
+    const redirectUrls = getAuthRedirectUrls();
+    
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: options.redirectTo || redirectUrls.callback,
+        scopes: options.scopes,
+        queryParams: options.queryParams,
+      },
+    });
+    
+    if (error) {
+      return {
+        success: false,
+        error: `Failed to initialize ${provider} sign-in: ${error.message}`,
+        timestamp: new Date(),
+      };
+    }
+    
+    return {
+      success: true,
+      data: { url: data.url },
+      timestamp: new Date(),
+      requestId: crypto.randomUUID(),
+    };
+    
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : `Failed to sign in with ${provider}`,
+      timestamp: new Date(),
+    };
+  }
 } 

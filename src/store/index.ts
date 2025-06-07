@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { User, Session } from '@supabase/supabase-js';
 import { 
   UserPreferences,
   Category,
@@ -12,6 +13,24 @@ import {
   MAX_CATEGORY_CRITERIA_LENGTH
 } from '../types';
 import type { VideoUI, SearchResultWithCategory } from '../types/video-ui';
+
+// =============================================================================
+// Authentication State Types (TASK_013_003)
+// =============================================================================
+
+interface AuthState {
+  user: User | null;
+  session: Session | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}
+
+interface AuthActions {
+  setUser: (user: User | null) => void;
+  setSession: (session: Session | null) => void;
+  clearAuth: () => void;
+  setAuthLoading: (loading: boolean) => void;
+}
 
 // =============================================================================
 // TASK_002_004: LocalStorage Persistence Configuration
@@ -780,7 +799,16 @@ const getMostFrequent = <T>(array: T[], count: number): Array<{ term: T; count: 
 /**
  * Main application state interface extending the original state with category functionality
  */
-interface AppState extends CategoryState, CategoryActions, CategorySelectionActions, CategorySearchState, CategorySearchActions, PersistenceState, PersistenceActions {
+interface AppState extends 
+  CategoryState, 
+  CategoryActions, 
+  CategorySelectionActions, 
+  CategorySearchState, 
+  CategorySearchActions, 
+  PersistenceState, 
+  PersistenceActions,
+  AuthState,
+  AuthActions {
   // Existing search state
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -941,6 +969,36 @@ const triggerAutoSave = (saveFunction: () => Promise<void>) => {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+      // =============================================================================
+      // Authentication State (TASK_013_003)
+      // NOTE: TASK_013_006 will migrate localStorage to user-based storage
+      // =============================================================================
+      
+      user: null,
+      session: null,
+      isAuthenticated: false,
+      isLoading: false,
+      
+      // Authentication actions
+      setUser: (user: User | null) => set((state) => ({ 
+        user, 
+        isAuthenticated: !!user,
+        isLoading: false 
+      })),
+      setSession: (session: Session | null) => set((state) => ({ 
+        session,
+        user: session?.user || null,
+        isAuthenticated: !!session?.user,
+        isLoading: false 
+      })),
+      clearAuth: () => set({ 
+        user: null, 
+        session: null, 
+        isAuthenticated: false,
+        isLoading: false 
+      }),
+      setAuthLoading: (loading: boolean) => set({ isLoading: loading }),
+      
       // =============================================================================
       // Existing State (unchanged)
       // =============================================================================
